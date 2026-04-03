@@ -7,5 +7,5 @@ echo "Loading model, please wait..."
 until curl -s http://localhost:5000 > /dev/null 2>&1; do
   sleep 1
 done
-open http://localhost:5000
+open http://127.0.0.1:5000
 wait $SERVER_PID
