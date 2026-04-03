@@ -20,7 +20,8 @@ Built with [MLX](https://github.com/ml-explore/mlx) (Apple's machine learning fr
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gemma4-local-chat
+git clone https://github.com/Vale717171/gemma4-local-chat
+
 cd gemma4-local-chat
 bash setup.sh
 ```
@@ -86,7 +87,7 @@ Everything runs locally. No data is sent anywhere. The only network request is t
 
 If this saved you time or sparked an idea:
 
-☕ [Buy me a coffee](https://buymeacoffee.com/YOUR_USERNAME)
+☕ [Buy me a coffee](https://buymeacoffee.com/Vale71)
 
 ---
 
