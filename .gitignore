@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.icns
+*.png
+icon.png
+.DS_Store

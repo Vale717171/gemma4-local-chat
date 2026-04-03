@@ -1,0 +1,60 @@
+import json
+from flask import Flask, request, Response, send_from_directory
+from mlx_vlm import load
+from mlx_vlm.prompt_utils import apply_chat_template
+from mlx_vlm.utils import load_config
+import mlx_vlm
+
+app = Flask(__name__)
+
+MODEL_PATH = "mlx-community/gemma-4-e4b-it-8bit"
+
+print(f"Loading model {MODEL_PATH}...")
+model, processor = load(MODEL_PATH)
+config = load_config(MODEL_PATH)
+print("Model ready.")
+
+
+@app.route("/")
+def index():
+    return send_from_directory(".", "index.html")
+
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    messages = data.get("messages", [])
+    max_tokens = data.get("max_tokens", 512)
+
+    system_prompt = data.get("system_prompt", "")
+
+    # Build full conversation as a single prompt
+    conversation = ""
+    if system_prompt:
+        conversation += f"[System: {system_prompt}]\n\n"
+    for msg in messages:
+        role = "User" if msg["role"] == "user" else "Assistant"
+        conversation += f"{role}: {msg['content']}\n"
+    conversation += "Assistant:"
+
+    prompt = apply_chat_template(processor, config, conversation, num_images=0)
+
+    def generate():
+        output = mlx_vlm.generate(
+            model,
+            processor,
+            prompt,
+            image=None,
+            max_tokens=max_tokens,
+            verbose=False,
+        )
+        text = output.text if hasattr(output, "text") else str(output)
+        yield f"data: {json.dumps({'text': text})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype="text/event-stream")
+
+
+if __name__ == "__main__":
+    print("Server running at http://localhost:5000")
+    app.run(port=5000, debug=False)
