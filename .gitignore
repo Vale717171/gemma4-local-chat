@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 *.icns
-*.png
 icon.png
+make_icon.py
+make_preview.py
 .DS_Store
