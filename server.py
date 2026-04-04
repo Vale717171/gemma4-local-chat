@@ -1,9 +1,8 @@
 import json
-from flask import Flask, request, Response, send_from_directory
-from mlx_vlm import load
+from flask import Flask, request, Response, send_from_directory, stream_with_context
+from mlx_vlm import load, stream_generate
 from mlx_vlm.prompt_utils import apply_chat_template
 from mlx_vlm.utils import load_config
-import mlx_vlm
 
 app = Flask(__name__)
 
@@ -39,17 +38,17 @@ def chat():
 
     prompt = apply_chat_template(processor, config, conversation, num_images=0)
 
+    @stream_with_context
     def generate():
-        output = mlx_vlm.generate(
+        for chunk in stream_generate(
             model,
             processor,
             prompt,
             image=None,
             max_tokens=max_tokens,
-            verbose=False,
-        )
-        text = output.text if hasattr(output, "text") else str(output)
-        yield f"data: {json.dumps({'text': text})}\n\n"
+        ):
+            token = chunk.text if hasattr(chunk, "text") else str(chunk)
+            yield f"data: {json.dumps({'token': token})}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype="text/event-stream")

@@ -329,18 +329,23 @@
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let reply = "";
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        for (const line of chunk.split("\n")) {
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line for next chunk
+        for (const line of lines) {
           if (line.startsWith("data: ") && line !== "data: [DONE]") {
             const data = JSON.parse(line.slice(6));
-            reply = data.text;
-            typingEl.remove();
-            contentEl.textContent = reply;
-            messagesEl.scrollTop = messagesEl.scrollHeight;
+            if (data.token) {
+              typingEl.remove();
+              reply += data.token;
+              contentEl.textContent = reply;
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
           }
         }
       }
