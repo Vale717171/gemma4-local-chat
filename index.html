@@ -100,6 +100,18 @@
       margin-top: 6px;
     }
 
+    #tokens-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 24px;
+      border-bottom: 1px solid #1a1a1a;
+      background: #111;
+    }
+    #tokens-row label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    #max-tokens-slider { flex: 1; accent-color: #2563eb; cursor: pointer; }
+    #max-tokens-value { font-size: 12px; color: #888; min-width: 40px; text-align: right; }
+
     #messages {
       -webkit-flex: 1;
       flex: 1;
@@ -225,6 +237,12 @@
   </div>
 </div>
 
+<div id="tokens-row">
+  <label>Max tokens</label>
+  <input type="range" id="max-tokens-slider" min="128" max="4096" step="128" value="512" />
+  <span id="max-tokens-value">512</span>
+</div>
+
 <div id="messages"></div>
 
 <div id="input-area">
@@ -245,6 +263,12 @@
   const toggleBtn = document.getElementById("system-toggle");
   const systemBody = document.getElementById("system-body");
   const tokenCount = document.getElementById("token-count");
+  const maxTokensSlider = document.getElementById("max-tokens-slider");
+  const maxTokensValue = document.getElementById("max-tokens-value");
+
+  maxTokensSlider.addEventListener("input", () => {
+    maxTokensValue.textContent = maxTokensSlider.value;
+  });
 
   let history = [];
   let busy = false;
@@ -321,7 +345,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history,
-          max_tokens: 512,
+          max_tokens: parseInt(maxTokensSlider.value),
           system_prompt: systemEl.value.trim(),
         }),
       });
