@@ -149,6 +149,66 @@
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .edit-btn {
+      background: none;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #444;
+      font-size: 11px;
+      padding: 1px 7px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .edit-btn:hover { color: #aaa; border-color: #555; }
+
+    .edit-area {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #2563eb;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #e8e8e8;
+      font-size: 15px;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      min-height: 80px;
+      margin-top: 6px;
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .edit-save {
+      background: #2563eb;
+      border: none;
+      border-radius: 7px;
+      color: white;
+      font-size: 12px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .edit-cancel {
+      background: none;
+      border: 1px solid #2a2a2a;
+      border-radius: 7px;
+      color: #555;
+      font-size: 12px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-family: inherit;
     }
 
     .typing {
@@ -303,22 +363,87 @@
   sendBtn.addEventListener("click", send);
   clearBtn.addEventListener("click", () => { history = []; messagesEl.innerHTML = ""; });
 
-  function addMessage(role, text) {
+  function addMessage(role, text, historyRef) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
+
     if (role === "assistant") {
       const label = document.createElement("div");
       label.className = "label";
-      label.textContent = "Gemma";
+      const labelText = document.createElement("span");
+      labelText.textContent = "Gemma";
+      label.appendChild(labelText);
+
+      // Edit button
+      const editBtn = document.createElement("button");
+      editBtn.className = "edit-btn";
+      editBtn.textContent = "edit";
+      label.appendChild(editBtn);
       div.appendChild(label);
+
+      const content = document.createElement("div");
+      content.className = "content";
+      content.textContent = text;
+      div.appendChild(content);
+
+      editBtn.addEventListener("click", () => {
+        if (div.querySelector(".edit-area")) return; // already editing
+
+        const area = document.createElement("textarea");
+        area.className = "edit-area";
+        area.value = content.textContent;
+        content.style.display = "none";
+
+        const actions = document.createElement("div");
+        actions.className = "edit-actions";
+
+        const saveBtn = document.createElement("button");
+        saveBtn.className = "edit-save";
+        saveBtn.textContent = "Save";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "edit-cancel";
+        cancelBtn.textContent = "Cancel";
+
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
+        div.appendChild(area);
+        div.appendChild(actions);
+        area.focus();
+
+        cancelBtn.addEventListener("click", () => {
+          area.remove();
+          actions.remove();
+          content.style.display = "";
+        });
+
+        saveBtn.addEventListener("click", () => {
+          const newText = area.value.trim();
+          if (!newText) return;
+          content.textContent = newText;
+          content.style.display = "";
+          area.remove();
+          actions.remove();
+          // Update history in place via ref
+          if (historyRef && historyRef.entry) {
+            historyRef.entry.content = newText;
+          }
+        });
+      });
+
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return content;
+
+    } else {
+      const content = document.createElement("div");
+      content.className = "content";
+      content.textContent = text;
+      div.appendChild(content);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return content;
     }
-    const content = document.createElement("div");
-    content.className = "content";
-    content.textContent = text;
-    div.appendChild(content);
-    messagesEl.appendChild(div);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    return content;
   }
 
   async function send() {
@@ -333,7 +458,8 @@
     addMessage("user", text);
     history.push({ role: "user", content: text });
 
-    const contentEl = addMessage("assistant", "");
+    const historyRef = {};
+    const contentEl = addMessage("assistant", "", historyRef);
     const typingEl = document.createElement("span");
     typingEl.className = "typing";
     typingEl.textContent = "···";
@@ -374,7 +500,9 @@
         }
       }
 
-      history.push({ role: "assistant", content: reply });
+      const entry = { role: "assistant", content: reply };
+      historyRef.entry = entry;
+      history.push(entry);
 
       // Rough token estimate (~4 chars per token)
       const totalChars = history.reduce((acc, m) => acc + m.content.length, 0);
