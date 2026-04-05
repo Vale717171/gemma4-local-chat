@@ -1,4 +1,5 @@
 runpod_config.py
+openrouter_config.py
 __pycache__/
 *.py[cod]
 *.icns

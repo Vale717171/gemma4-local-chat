@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <title>Gemma 4 Chat</title>
+  <title>Gemma 4 31B Chat</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -36,60 +36,22 @@
     header h1 { font-size: 16px; font-weight: 600; color: #fff; }
     header span { font-size: 12px; color: #666; }
     #token-count { margin-left: auto; font-size: 12px; color: #444; }
-
-    /* Mode switcher */
-    #mode-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 24px;
-      border-bottom: 1px solid #1a1a1a;
-      background: #0d0d0d;
-    }
-
-    .mode-btn {
-      background: none;
-      border: 1px solid #2a2a2a;
-      border-radius: 8px;
-      color: #555;
-      font-size: 12px;
-      padding: 4px 14px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .mode-btn:hover { border-color: #444; color: #aaa; }
-    .mode-btn.active { border-color: #2563eb; color: #60a5fa; background: #1e3a5f22; }
-    .mode-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-    #runpod-status {
-      font-size: 11px;
-      color: #444;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    #runpod-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: #333;
-      flex-shrink: 0;
-    }
-    #runpod-dot.cold { background: #f59e0b; }
-    #runpod-dot.ready { background: #4ade80; }
-    #runpod-dot.error { background: #ef4444; }
-
-    #cost-display {
-      margin-left: auto;
+    #cost-counter {
       font-size: 12px;
       color: #4ade80;
       font-variant-numeric: tabular-nums;
-      display: none;
+      margin-left: 12px;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
-    #cost-display.active { display: block; }
+    #cost-counter.visible { opacity: 1; }
+    #balance-display {
+      font-size: 12px;
+      color: #888;
+      font-variant-numeric: tabular-nums;
+      margin-left: 10px;
+    }
+    #balance-display.low { color: #f59e0b; }
 
     #dot {
       width: 8px; height: 8px;
@@ -233,8 +195,8 @@
       line-height: 1.6;
       resize: vertical;
       outline: none;
-      min-height: 80px;
       margin-top: 6px;
+      overflow-y: hidden;
     }
 
     .edit-actions {
@@ -312,6 +274,21 @@
     #send:disabled { background: #1a1a1a; cursor: not-allowed; }
     #send svg { width: 18px; height: 18px; fill: white; }
 
+    #stop {
+      background: #7f1d1d;
+      border: none;
+      border-radius: 10px;
+      width: 42px; height: 42px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #stop:hover { background: #991b1b; }
+    #stop svg { width: 16px; height: 16px; fill: white; }
+
     #clear {
       background: none;
       border: 1px solid #2a2a2a;
@@ -336,20 +313,12 @@
 
 <header>
   <div id="dot"></div>
-  <h1>Gemma 4 E4B</h1>
-  <span>local · mlx</span>
+  <h1>Gemma 4 31B</h1>
+  <span>OpenRouter</span>
   <span id="token-count"></span>
+  <span id="cost-counter">$0.00000</span>
+  <span id="balance-display">saldo: …</span>
 </header>
-
-<div id="mode-bar">
-  <button class="mode-btn active" id="btn-local">● Local — Gemma 4 E4B</button>
-  <button class="mode-btn" id="btn-cloud" disabled>○ Cloud — Gemma 4 27B</button>
-  <div id="runpod-status">
-    <div id="runpod-dot"></div>
-    <span id="runpod-status-text">RunPod not configured</span>
-  </div>
-  <span id="cost-display">session cost: $<span id="cost-value">0.00000</span></span>
-</div>
 
 <div id="system-panel">
   <button id="system-toggle">
@@ -375,6 +344,9 @@
   <button id="send">
     <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
   </button>
+  <button id="stop" title="Stop generation">
+    <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+  </button>
 </div>
 
 <script>
@@ -382,7 +354,9 @@
   const promptEl = document.getElementById("prompt");
   const systemEl = document.getElementById("system-prompt");
   const sendBtn = document.getElementById("send");
+  const stopBtn = document.getElementById("stop");
   const clearBtn = document.getElementById("clear");
+  let abortController = null;
   const dot = document.getElementById("dot");
   const toggleBtn = document.getElementById("system-toggle");
   const systemBody = document.getElementById("system-body");
@@ -394,65 +368,37 @@
     maxTokensValue.textContent = maxTokensSlider.value;
   });
 
-  let history = [];
-  let busy = false;
-  let currentMode = "local";
+  const costCounter = document.getElementById("cost-counter");
+  const balanceDisplay = document.getElementById("balance-display");
+
+  async function fetchBalance() {
+    try {
+      const data = await fetch("/balance").then(r => r.json());
+      if (data.error) { balanceDisplay.textContent = "saldo: n/d"; return; }
+      if (data.remaining === null) {
+        balanceDisplay.textContent = "saldo: illimitato";
+      } else {
+        balanceDisplay.textContent = `saldo: $${data.remaining.toFixed(3)}`;
+        if (data.remaining < 1) balanceDisplay.classList.add("low");
+        else balanceDisplay.classList.remove("low");
+      }
+    } catch { balanceDisplay.textContent = "saldo: n/d"; }
+  }
+
+  fetchBalance();
+  setInterval(fetchBalance, 30000); // aggiorna ogni 30s
+  const PRICE_INPUT  = 0.14 / 1_000_000;  // $ per input token
+  const PRICE_OUTPUT = 0.40 / 1_000_000;  // $ per output token
   let sessionCost = 0;
 
-  const btnLocal = document.getElementById("btn-local");
-  const btnCloud = document.getElementById("btn-cloud");
-  const runpodDot = document.getElementById("runpod-dot");
-  const runpodStatusText = document.getElementById("runpod-status-text");
-  const costDisplay = document.getElementById("cost-display");
-  const costValue = document.getElementById("cost-value");
-
-  // Check RunPod availability
-  async function initRunPod() {
-    const res = await fetch("/runpod/available").then(r => r.json());
-    if (res.available) {
-      btnCloud.disabled = false;
-      checkRunPodStatus();
-      setInterval(checkRunPodStatus, 15000);
-    }
+  function updateCost(inputTokens, outputTokens) {
+    sessionCost += inputTokens * PRICE_INPUT + outputTokens * PRICE_OUTPUT;
+    costCounter.textContent = "$" + sessionCost.toFixed(5);
+    costCounter.classList.add("visible");
   }
 
-  async function checkRunPodStatus() {
-    try {
-      const data = await fetch("/runpod/status").then(r => r.json());
-      if (data.status === "ready") {
-        runpodDot.className = "ready";
-        runpodStatusText.textContent = "RunPod ready";
-      } else if (data.status === "cold") {
-        runpodDot.className = "cold";
-        runpodStatusText.textContent = "RunPod cold (30s warmup)";
-      } else if (data.status === "error") {
-        runpodDot.className = "error";
-        runpodStatusText.textContent = "RunPod error";
-      }
-    } catch {
-      runpodDot.className = "error";
-      runpodStatusText.textContent = "RunPod unreachable";
-    }
-  }
-
-  btnLocal.addEventListener("click", () => {
-    currentMode = "local";
-    btnLocal.classList.add("active");
-    btnCloud.classList.remove("active");
-    costDisplay.classList.remove("active");
-  });
-
-  btnCloud.addEventListener("click", () => {
-    currentMode = "cloud";
-    btnCloud.classList.add("active");
-    btnLocal.classList.remove("active");
-    sessionCost = 0;
-    costValue.textContent = "0.00000";
-    costDisplay.classList.add("active");
-    checkRunPodStatus();
-  });
-
-  initRunPod();
+  let history = [];
+  let busy = false;
 
   // Persist system prompt
   const DEFAULT_SYSTEM_PROMPT = `You are a collaborative literary fiction writer. You assist the user in writing a story together, following these rules strictly:
@@ -490,7 +436,14 @@
   });
 
   sendBtn.addEventListener("click", send);
-  clearBtn.addEventListener("click", () => { history = []; messagesEl.innerHTML = ""; });
+  stopBtn.addEventListener("click", () => { if (abortController) abortController.abort(); });
+  clearBtn.addEventListener("click", () => {
+    history = [];
+    messagesEl.innerHTML = "";
+    sessionCost = 0;
+    costCounter.textContent = "$0.00000";
+    costCounter.classList.remove("visible");
+  });
 
   function addMessage(role, text, historyRef) {
     const div = document.createElement("div");
@@ -538,6 +491,15 @@
         actions.appendChild(cancelBtn);
         div.appendChild(area);
         div.appendChild(actions);
+
+        // Altezza automatica sul contenuto
+        area.style.height = "auto";
+        area.style.height = area.scrollHeight + "px";
+        area.addEventListener("input", () => {
+          area.style.height = "auto";
+          area.style.height = area.scrollHeight + "px";
+        });
+
         area.focus();
 
         cancelBtn.addEventListener("click", () => {
@@ -581,8 +543,10 @@
 
     busy = true;
     sendBtn.disabled = true;
+    stopBtn.style.display = "flex";
     promptEl.value = "";
     promptEl.style.height = "auto";
+    abortController = new AbortController();
 
     addMessage("user", text);
     history.push({ role: "user", content: text });
@@ -598,11 +562,11 @@
       const res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
         body: JSON.stringify({
           messages: history,
           max_tokens: parseInt(maxTokensSlider.value),
           system_prompt: systemEl.value.trim(),
-          mode: currentMode,
         }),
       });
 
@@ -624,12 +588,8 @@
               typingEl.remove();
               contentEl.textContent = `Error: ${data.error}`;
             }
-            if (data.total_cost !== undefined) {
-              sessionCost += data.total_cost;
-              costValue.textContent = sessionCost.toFixed(5);
-            }
-            if (data.cost !== undefined && currentMode === "cloud") {
-              costValue.textContent = (sessionCost + data.cost).toFixed(5);
+            if (data.usage) {
+              updateCost(data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
             }
             if (data.token) {
               typingEl.remove();
@@ -651,11 +611,17 @@
       tokenCount.textContent = `~${est} tokens`;
     } catch (err) {
       typingEl.remove();
-      contentEl.textContent = "Error: server not responding.";
+      if (err.name === "AbortError") {
+        if (!reply) contentEl.textContent = "[generazione interrotta]";
+      } else {
+        contentEl.textContent = "Error: server not responding.";
+      }
     }
 
     busy = false;
     sendBtn.disabled = false;
+    stopBtn.style.display = "none";
+    abortController = null;
     promptEl.focus();
   }
 </script>
