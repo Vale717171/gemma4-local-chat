@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>Gemma 4 31B Chat</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,158 +10,280 @@
     html, body {
       height: 100%;
       height: -webkit-fill-available;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f7f8;
+      color: #1a1a1a;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f0f0f;
-      color: #e8e8e8;
+      display: flex;
       min-height: 100vh;
       min-height: -webkit-fill-available;
-      display: -webkit-flex;
-      display: flex;
-      -webkit-flex-direction: column;
-      flex-direction: column;
     }
 
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 260px;
+      background: #ffffff;
+      border-right: 1px solid #e5e5e5;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.2s;
+      overflow: hidden;
+    }
+    #sidebar.collapsed { width: 0; }
+
+    #sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    #new-chat-btn {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    #new-chat-btn:hover { background: #1d4ed8; }
+
+    #conv-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .conv-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.1s;
+      group: true;
+    }
+    .conv-item:hover { background: #f3f4f6; }
+    .conv-item.active { background: #eff6ff; }
+
+    .conv-title {
+      flex: 1;
+      font-size: 13px;
+      color: #374151;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .conv-date {
+      font-size: 11px;
+      color: #9ca3af;
+      white-space: nowrap;
+    }
+    .conv-delete {
+      background: none;
+      border: none;
+      color: #d1d5db;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.1s, color 0.1s;
+      flex-shrink: 0;
+    }
+    .conv-item:hover .conv-delete { opacity: 1; }
+    .conv-delete:hover { color: #ef4444; }
+
+    .conv-item-inner {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Main area ── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
     header {
-      padding: 16px 24px;
-      border-bottom: 1px solid #222;
+      padding: 12px 20px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #ffffff;
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-shrink: 0;
     }
 
-    header h1 { font-size: 16px; font-weight: 600; color: #fff; }
-    header span { font-size: 12px; color: #666; }
-    #token-count { margin-left: auto; font-size: 12px; color: #444; }
-    #cost-counter {
-      font-size: 12px;
-      color: #4ade80;
-      font-variant-numeric: tabular-nums;
-      margin-left: 12px;
-      opacity: 0;
-      transition: opacity 0.3s;
+    #sidebar-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #6b7280;
+      font-size: 18px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      transition: background 0.1s;
+      line-height: 1;
     }
-    #cost-counter.visible { opacity: 1; }
-    #balance-display {
-      font-size: 12px;
-      color: #888;
-      font-variant-numeric: tabular-nums;
-      margin-left: 10px;
-    }
-    #balance-display.low { color: #f59e0b; }
+    #sidebar-toggle:hover { background: #f3f4f6; }
 
     #dot {
       width: 8px; height: 8px;
       border-radius: 50%;
-      background: #555;
+      background: #d1d5db;
+      flex-shrink: 0;
     }
-    #dot.online { background: #4ade80; }
+    #dot.online { background: #22c55e; }
 
-    /* System prompt panel */
+    header h1 { font-size: 15px; font-weight: 600; color: #111; }
+    header .sub { font-size: 12px; color: #9ca3af; }
+
+    #token-count { font-size: 12px; color: #9ca3af; margin-left: auto; }
+
+    #cost-counter {
+      font-size: 12px;
+      color: #16a34a;
+      font-variant-numeric: tabular-nums;
+      margin-left: 10px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #cost-counter.visible { opacity: 1; }
+
+    #balance-display {
+      font-size: 12px;
+      color: #6b7280;
+      font-variant-numeric: tabular-nums;
+      margin-left: 8px;
+    }
+    #balance-display.low { color: #f59e0b; }
+
+    /* ── System prompt panel ── */
     #system-panel {
-      border-bottom: 1px solid #1a1a1a;
-      background: #111;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fafafa;
+      flex-shrink: 0;
     }
 
     #system-toggle {
       width: 100%;
-      padding: 10px 24px;
+      padding: 9px 20px;
       background: none;
       border: none;
-      color: #555;
-      font-size: 12px;
+      color: #9ca3af;
+      font-size: 11px;
       text-align: left;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 6px;
       font-family: inherit;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       transition: color 0.15s;
     }
-    #system-toggle:hover { color: #888; }
+    #system-toggle:hover { color: #6b7280; }
     #system-toggle .arrow { transition: transform 0.2s; display: inline-block; }
     #system-toggle.open .arrow { transform: rotate(90deg); }
 
-    #system-body {
-      display: none;
-      padding: 0 24px 14px;
-    }
+    #system-body { display: none; padding: 0 20px 12px; }
     #system-body.open { display: block; }
 
     #system-prompt {
       width: 100%;
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
-      border-radius: 10px;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
       padding: 10px 14px;
-      color: #e8e8e8;
+      color: #1a1a1a;
       font-size: 13px;
       resize: vertical;
       outline: none;
-      min-height: 64px;
-      max-height: 200px;
+      min-height: 60px;
+      max-height: 180px;
       font-family: inherit;
       line-height: 1.5;
     }
-    #system-prompt:focus { border-color: #3b3b3b; }
+    #system-prompt:focus { border-color: #2563eb; }
 
-    .system-hint {
-      font-size: 11px;
-      color: #444;
+    #system-actions {
+      display: flex;
+      gap: 8px;
       margin-top: 6px;
     }
 
+    .sys-btn {
+      background: none;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      color: #6b7280;
+      font-size: 11px;
+      padding: 3px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.1s;
+    }
+    .sys-btn:hover { border-color: #9ca3af; color: #374151; }
+
+    /* ── Tokens row ── */
     #tokens-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 24px;
-      border-bottom: 1px solid #1a1a1a;
-      background: #111;
+      padding: 7px 20px;
+      border-bottom: 1px solid #e5e5e5;
+      background: #fafafa;
+      flex-shrink: 0;
     }
-    #tokens-row label { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    #tokens-row label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
     #max-tokens-slider { flex: 1; accent-color: #2563eb; cursor: pointer; }
-    #max-tokens-value { font-size: 12px; color: #888; min-width: 40px; text-align: right; }
+    #max-tokens-value { font-size: 12px; color: #6b7280; min-width: 36px; text-align: right; }
 
+    /* ── Messages ── */
     #messages {
-      -webkit-flex: 1;
       flex: 1;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
-      padding: 24px;
+      padding: 24px 20px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
-    .message {
-      max-width: 720px;
-      line-height: 1.6;
-      font-size: 15px;
-    }
+    .message { max-width: 680px; line-height: 1.65; font-size: 15px; }
 
     .message.user {
       align-self: flex-end;
-      background: #1e3a5f;
+      background: #2563eb;
       padding: 10px 16px;
       border-radius: 18px 18px 4px 18px;
-      color: #dbeafe;
+      color: #ffffff;
     }
 
     .message.assistant {
       align-self: flex-start;
-      color: #e8e8e8;
+      color: #1a1a1a;
       white-space: pre-wrap;
     }
 
     .message.assistant .label {
       font-size: 11px;
-      color: #555;
-      margin-bottom: 4px;
+      color: #9ca3af;
+      margin-bottom: 5px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       display: flex;
@@ -170,26 +291,51 @@
       gap: 8px;
     }
 
+    /* Edit button on user messages */
+    .message.user {
+      position: relative;
+    }
+    .user-edit-btn {
+      position: absolute;
+      left: -32px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      color: #9ca3af;
+      font-size: 11px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-family: inherit;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .message.user:hover .user-edit-btn { opacity: 1; }
+    .user-edit-btn:hover { color: #2563eb; border-color: #2563eb; }
+
+    /* Edit button on assistant messages */
     .edit-btn {
       background: none;
-      border: 1px solid #2a2a2a;
+      border: 1px solid #e5e5e5;
       border-radius: 6px;
-      color: #444;
+      color: #9ca3af;
       font-size: 11px;
       padding: 1px 7px;
       cursor: pointer;
       font-family: inherit;
       transition: color 0.15s, border-color 0.15s;
     }
-    .edit-btn:hover { color: #aaa; border-color: #555; }
+    .edit-btn:hover { color: #2563eb; border-color: #2563eb; }
 
     .edit-area {
       width: 100%;
-      background: #1a1a1a;
+      background: #ffffff;
       border: 1px solid #2563eb;
       border-radius: 10px;
       padding: 10px 14px;
-      color: #e8e8e8;
+      color: #1a1a1a;
       font-size: 15px;
       font-family: inherit;
       line-height: 1.6;
@@ -215,54 +361,52 @@
       cursor: pointer;
       font-family: inherit;
     }
-
     .edit-cancel {
       background: none;
-      border: 1px solid #2a2a2a;
+      border: 1px solid #e5e5e5;
       border-radius: 7px;
-      color: #555;
+      color: #6b7280;
       font-size: 12px;
       padding: 4px 12px;
       cursor: pointer;
       font-family: inherit;
     }
 
-    .typing {
-      display: inline-block;
-      color: #555;
-      font-size: 20px;
-      letter-spacing: 2px;
-    }
+    .typing { display: inline-block; color: #9ca3af; font-size: 20px; letter-spacing: 2px; }
 
+    /* ── Input area ── */
     #input-area {
-      padding: 16px 24px;
-      border-top: 1px solid #1a1a1a;
+      padding: 14px 20px;
+      border-top: 1px solid #e5e5e5;
+      background: #ffffff;
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: flex-end;
+      flex-shrink: 0;
     }
 
     #prompt {
       flex: 1;
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
+      background: #f7f7f8;
+      border: 1px solid #e5e5e5;
       border-radius: 12px;
-      padding: 12px 16px;
-      color: #e8e8e8;
+      padding: 11px 16px;
+      color: #1a1a1a;
       font-size: 15px;
       resize: none;
       outline: none;
       max-height: 160px;
       line-height: 1.5;
       font-family: inherit;
+      transition: border-color 0.15s;
     }
-    #prompt:focus { border-color: #3b3b3b; }
+    #prompt:focus { border-color: #2563eb; background: #ffffff; }
 
     #send {
       background: #2563eb;
       border: none;
       border-radius: 10px;
-      width: 42px; height: 42px;
+      width: 40px; height: 40px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -271,14 +415,14 @@
       transition: background 0.15s;
     }
     #send:hover { background: #1d4ed8; }
-    #send:disabled { background: #1a1a1a; cursor: not-allowed; }
-    #send svg { width: 18px; height: 18px; fill: white; }
+    #send:disabled { background: #e5e5e5; cursor: not-allowed; }
+    #send svg { width: 17px; height: 17px; fill: white; }
 
     #stop {
-      background: #7f1d1d;
+      background: #fee2e2;
       border: none;
       border-radius: 10px;
-      width: 42px; height: 42px;
+      width: 40px; height: 40px;
       cursor: pointer;
       display: none;
       align-items: center;
@@ -286,122 +430,132 @@
       flex-shrink: 0;
       transition: background 0.15s;
     }
-    #stop:hover { background: #991b1b; }
-    #stop svg { width: 16px; height: 16px; fill: white; }
+    #stop:hover { background: #fecaca; }
+    #stop svg { width: 14px; height: 14px; fill: #ef4444; }
 
     #clear {
       background: none;
-      border: 1px solid #2a2a2a;
+      border: 1px solid #e5e5e5;
       border-radius: 10px;
-      width: 42px; height: 42px;
+      width: 40px; height: 40px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #555;
-      font-size: 16px;
+      color: #9ca3af;
+      font-size: 15px;
       transition: border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
     }
-    #clear:hover { border-color: #444; color: #aaa; }
+    #clear:hover { border-color: #9ca3af; color: #374151; }
+
+    #save-btn {
+      background: none;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      width: 40px; height: 40px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 15px;
+      transition: border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+      title: "Salva conversazione";
+    }
+    #save-btn:hover { border-color: #22c55e; color: #16a34a; }
 
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+    ::-webkit-scrollbar-thumb { background: #e5e5e5; border-radius: 2px; }
   </style>
 </head>
 <body>
 
-<header>
-  <div id="dot"></div>
-  <h1>Gemma 4 31B</h1>
-  <span>OpenRouter</span>
-  <span id="token-count"></span>
-  <span id="cost-counter">$0.00000</span>
-  <span id="balance-display">saldo: …</span>
-</header>
+<!-- Sidebar -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <button id="new-chat-btn">+ New chat</button>
+  </div>
+  <div id="conv-list"></div>
+</div>
 
-<div id="system-panel">
-  <button id="system-toggle">
-    <span class="arrow">›</span> System Prompt
-  </button>
-  <div id="system-body">
-    <textarea id="system-prompt" placeholder="You are a helpful assistant…"></textarea>
-    <div class="system-hint">Applied to every message. Changes take effect from the next message.</div>
+<!-- Main -->
+<div id="main">
+  <header>
+    <button id="sidebar-toggle" title="Conversazioni">☰</button>
+    <div id="dot"></div>
+    <h1>Gemma 4 31B</h1>
+    <span class="sub">OpenRouter</span>
+    <span id="token-count"></span>
+    <span id="cost-counter">$0.00000</span>
+    <span id="balance-display">saldo: …</span>
+  </header>
+
+  <div id="system-panel">
+    <button id="system-toggle">
+      <span class="arrow">›</span> System Prompt
+    </button>
+    <div id="system-body">
+      <textarea id="system-prompt" placeholder="You are a helpful assistant…"></textarea>
+      <div id="system-actions">
+        <button class="sys-btn" id="reset-system">Reset default</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tokens-row">
+    <label>Max tokens</label>
+    <input type="range" id="max-tokens-slider" min="128" max="4096" step="128" value="512" />
+    <span id="max-tokens-value">512</span>
+  </div>
+
+  <div id="messages"></div>
+
+  <div id="input-area">
+    <button id="clear" title="Nuova chat">✕</button>
+    <button id="save-btn" title="Salva conversazione">💾</button>
+    <textarea id="prompt" rows="1" placeholder="Message Gemma…"></textarea>
+    <button id="send">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+    <button id="stop" title="Stop generation">
+      <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+    </button>
   </div>
 </div>
 
-<div id="tokens-row">
-  <label>Max tokens</label>
-  <input type="range" id="max-tokens-slider" min="128" max="4096" step="128" value="512" />
-  <span id="max-tokens-value">512</span>
-</div>
-
-<div id="messages"></div>
-
-<div id="input-area">
-  <button id="clear" title="Clear chat">✕</button>
-  <textarea id="prompt" rows="1" placeholder="Message Gemma…"></textarea>
-  <button id="send">
-    <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
-  </button>
-  <button id="stop" title="Stop generation">
-    <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-  </button>
-</div>
-
 <script>
-  const messagesEl = document.getElementById("messages");
-  const promptEl = document.getElementById("prompt");
-  const systemEl = document.getElementById("system-prompt");
-  const sendBtn = document.getElementById("send");
-  const stopBtn = document.getElementById("stop");
-  const clearBtn = document.getElementById("clear");
-  let abortController = null;
-  const dot = document.getElementById("dot");
-  const toggleBtn = document.getElementById("system-toggle");
-  const systemBody = document.getElementById("system-body");
-  const tokenCount = document.getElementById("token-count");
-  const maxTokensSlider = document.getElementById("max-tokens-slider");
-  const maxTokensValue = document.getElementById("max-tokens-value");
+  // ── Elements ──────────────────────────────────────────────────
+  const messagesEl   = document.getElementById("messages");
+  const promptEl     = document.getElementById("prompt");
+  const systemEl     = document.getElementById("system-prompt");
+  const sendBtn      = document.getElementById("send");
+  const stopBtn      = document.getElementById("stop");
+  const clearBtn     = document.getElementById("clear");
+  const saveBtn      = document.getElementById("save-btn");
+  const dot          = document.getElementById("dot");
+  const toggleBtn    = document.getElementById("system-toggle");
+  const systemBody   = document.getElementById("system-body");
+  const tokenCount   = document.getElementById("token-count");
+  const maxSlider    = document.getElementById("max-tokens-slider");
+  const maxValue     = document.getElementById("max-tokens-value");
+  const costCounter  = document.getElementById("cost-counter");
+  const balanceEl    = document.getElementById("balance-display");
+  const sidebarEl    = document.getElementById("sidebar");
+  const sidebarToggle= document.getElementById("sidebar-toggle");
+  const newChatBtn   = document.getElementById("new-chat-btn");
+  const convList     = document.getElementById("conv-list");
+  const resetSystem  = document.getElementById("reset-system");
 
-  maxTokensSlider.addEventListener("input", () => {
-    maxTokensValue.textContent = maxTokensSlider.value;
-  });
+  // ── Constants ─────────────────────────────────────────────────
+  const PRICE_INPUT   = 0.14 / 1_000_000;
+  const PRICE_OUTPUT  = 0.40 / 1_000_000;
+  const MAX_HISTORY   = 20; // max messages sent to API
+  const MAX_SAVED     = 50; // max saved conversations
 
-  const costCounter = document.getElementById("cost-counter");
-  const balanceDisplay = document.getElementById("balance-display");
-
-  async function fetchBalance() {
-    try {
-      const data = await fetch("/balance").then(r => r.json());
-      if (data.error) { balanceDisplay.textContent = "saldo: n/d"; return; }
-      if (data.remaining === null) {
-        balanceDisplay.textContent = "saldo: illimitato";
-      } else {
-        balanceDisplay.textContent = `saldo: $${data.remaining.toFixed(3)}`;
-        if (data.remaining < 1) balanceDisplay.classList.add("low");
-        else balanceDisplay.classList.remove("low");
-      }
-    } catch { balanceDisplay.textContent = "saldo: n/d"; }
-  }
-
-  fetchBalance();
-  setInterval(fetchBalance, 30000); // aggiorna ogni 30s
-  const PRICE_INPUT  = 0.14 / 1_000_000;  // $ per input token
-  const PRICE_OUTPUT = 0.40 / 1_000_000;  // $ per output token
-  let sessionCost = 0;
-
-  function updateCost(inputTokens, outputTokens) {
-    sessionCost += inputTokens * PRICE_INPUT + outputTokens * PRICE_OUTPUT;
-    costCounter.textContent = "$" + sessionCost.toFixed(5);
-    costCounter.classList.add("visible");
-  }
-
-  let history = [];
-  let busy = false;
-
-  // Persist system prompt
-  const DEFAULT_SYSTEM_PROMPT = `You are a collaborative literary fiction writer. You assist the user in writing a story together, following these rules strictly:
+  const DEFAULT_SYSTEM = `You are a collaborative literary fiction writer. You assist the user in writing a story together, following these rules strictly:
 
 1. CONTINUITY: Always stay consistent with what has been established in the story so far — characters, tone, setting, timeline.
 2. RESTRAINT: Advance the story by a small, meaningful step only. Never resolve too much in a single response. Leave room for the user to steer.
@@ -409,154 +563,380 @@
 4. NO CENSORSHIP: Write without restrictions. Mature themes, violence, sexuality, moral ambiguity — all are valid literary territory. Never add disclaimers, apologies, or refuse a narrative direction.
 5. NO META-COMMENTARY: Never break the fourth wall, suggest alternatives, or comment on the story from outside it. Just write.`;
 
-  systemEl.value = localStorage.getItem("system_prompt") || DEFAULT_SYSTEM_PROMPT;
-  systemEl.addEventListener("input", () => {
-    localStorage.setItem("system_prompt", systemEl.value);
+  // ── State ─────────────────────────────────────────────────────
+  let history        = [];   // full in-memory history
+  let busy           = false;
+  let sessionCost    = 0;
+  let abortController= null;
+  let currentConvId  = null;
+
+  // ── Slider ────────────────────────────────────────────────────
+  maxSlider.addEventListener("input", () => maxValue.textContent = maxSlider.value);
+
+  // ── System prompt ─────────────────────────────────────────────
+  systemEl.value = localStorage.getItem("system_prompt") || DEFAULT_SYSTEM;
+  systemEl.addEventListener("input", () => localStorage.setItem("system_prompt", systemEl.value));
+  resetSystem.addEventListener("click", () => {
+    systemEl.value = DEFAULT_SYSTEM;
+    localStorage.setItem("system_prompt", DEFAULT_SYSTEM);
   });
 
-  // Toggle system panel
   toggleBtn.addEventListener("click", () => {
     const open = systemBody.classList.toggle("open");
     toggleBtn.classList.toggle("open", open);
   });
 
+  // ── Sidebar ───────────────────────────────────────────────────
+  sidebarToggle.addEventListener("click", () => sidebarEl.classList.toggle("collapsed"));
+
+  // ── Conversations (localStorage) ─────────────────────────────
+  function getConversations() {
+    try { return JSON.parse(localStorage.getItem("conversations") || "[]"); }
+    catch { return []; }
+  }
+
+  function saveCurrentConversation() {
+    if (history.length === 0) return;
+    const convs = getConversations();
+    const firstUser = history.find(m => m.role === "user");
+    const title = firstUser ? firstUser.content.slice(0, 60) : "Conversazione";
+    const id = currentConvId || Date.now().toString();
+    currentConvId = id;
+    const existing = convs.findIndex(c => c.id === id);
+    const conv = { id, title, date: new Date().toISOString(), messages: [...history] };
+    if (existing >= 0) convs[existing] = conv;
+    else convs.unshift(conv);
+    localStorage.setItem("conversations", JSON.stringify(convs.slice(0, MAX_SAVED)));
+    renderConvList();
+  }
+
+  function deleteConversation(id) {
+    const convs = getConversations().filter(c => c.id !== id);
+    localStorage.setItem("conversations", JSON.stringify(convs));
+    if (currentConvId === id) { currentConvId = null; }
+    renderConvList();
+  }
+
+  function loadConversation(id) {
+    const conv = getConversations().find(c => c.id === id);
+    if (!conv) return;
+    currentConvId = id;
+    history = [...conv.messages];
+    sessionCost = 0;
+    costCounter.textContent = "$0.00000";
+    costCounter.classList.remove("visible");
+    messagesEl.innerHTML = "";
+    for (const msg of history) {
+      if (msg.role === "user") renderUserMessage(msg.content, history.indexOf(msg));
+      else renderAssistantMessage(msg.content, history.indexOf(msg));
+    }
+    updateTokenCount();
+    renderConvList();
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso);
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) {
+      return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    }
+    return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
+  }
+
+  function renderConvList() {
+    const convs = getConversations();
+    convList.innerHTML = "";
+    if (convs.length === 0) {
+      convList.innerHTML = `<div style="padding:12px;font-size:12px;color:#9ca3af;text-align:center;">Nessuna conversazione salvata</div>`;
+      return;
+    }
+    for (const conv of convs) {
+      const item = document.createElement("div");
+      item.className = "conv-item" + (conv.id === currentConvId ? " active" : "");
+      item.innerHTML = `
+        <div class="conv-item-inner">
+          <div class="conv-title">${conv.title}</div>
+          <div class="conv-date">${formatDate(conv.date)}</div>
+        </div>
+        <button class="conv-delete" title="Elimina">✕</button>
+      `;
+      item.querySelector(".conv-item-inner").addEventListener("click", () => loadConversation(conv.id));
+      item.querySelector(".conv-delete").addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteConversation(conv.id);
+      });
+      convList.appendChild(item);
+    }
+  }
+
+  renderConvList();
+
+  newChatBtn.addEventListener("click", () => {
+    history = [];
+    currentConvId = null;
+    messagesEl.innerHTML = "";
+    sessionCost = 0;
+    costCounter.textContent = "$0.00000";
+    costCounter.classList.remove("visible");
+    tokenCount.textContent = "";
+    renderConvList();
+  });
+
+  saveBtn.addEventListener("click", () => {
+    if (history.length === 0) return;
+    saveCurrentConversation();
+    saveBtn.textContent = "✓";
+    setTimeout(() => saveBtn.textContent = "💾", 1500);
+  });
+
+  // ── Rendering ─────────────────────────────────────────────────
+  function renderUserMessage(text, histIdx) {
+    const div = document.createElement("div");
+    div.className = "message user";
+    div.dataset.histIdx = histIdx;
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "user-edit-btn";
+    editBtn.textContent = "edit";
+    div.appendChild(editBtn);
+
+    const content = document.createElement("div");
+    content.className = "content";
+    content.textContent = text;
+    div.appendChild(content);
+
+    editBtn.addEventListener("click", () => startUserEdit(div, content, histIdx));
+
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function renderAssistantMessage(text, histIdx) {
+    const div = document.createElement("div");
+    div.className = "message assistant";
+    div.dataset.histIdx = histIdx;
+
+    const label = document.createElement("div");
+    label.className = "label";
+    const labelText = document.createElement("span");
+    labelText.textContent = "Gemma";
+    label.appendChild(labelText);
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "edit-btn";
+    editBtn.textContent = "edit";
+    label.appendChild(editBtn);
+    div.appendChild(label);
+
+    const content = document.createElement("div");
+    content.className = "content";
+    content.textContent = text;
+    div.appendChild(content);
+
+    editBtn.addEventListener("click", () => startAssistantEdit(div, content, histIdx));
+
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return content;
+  }
+
+  // Edit user message → truncate and regenerate
+  function startUserEdit(div, content, histIdx) {
+    if (div.querySelector(".edit-area")) return;
+    const area = document.createElement("textarea");
+    area.className = "edit-area";
+    area.value = content.textContent;
+    content.style.display = "none";
+
+    const actions = document.createElement("div");
+    actions.className = "edit-actions";
+    const saveBtn2 = document.createElement("button");
+    saveBtn2.className = "edit-save";
+    saveBtn2.textContent = "Send";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "edit-cancel";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(saveBtn2);
+    actions.appendChild(cancelBtn);
+    div.appendChild(area);
+    div.appendChild(actions);
+
+    area.style.height = "auto";
+    area.style.height = area.scrollHeight + "px";
+    area.addEventListener("input", () => { area.style.height = "auto"; area.style.height = area.scrollHeight + "px"; });
+    area.focus();
+
+    cancelBtn.addEventListener("click", () => {
+      area.remove(); actions.remove(); content.style.display = "";
+    });
+
+    saveBtn2.addEventListener("click", async () => {
+      const newText = area.value.trim();
+      if (!newText) return;
+      // Truncate history from this index onwards
+      history = history.slice(0, histIdx);
+      // Remove all DOM messages from this index onwards
+      const allMessages = [...messagesEl.querySelectorAll(".message")];
+      for (const m of allMessages) {
+        if (parseInt(m.dataset.histIdx) >= histIdx) m.remove();
+      }
+      // Send new message
+      await sendMessage(newText);
+    });
+  }
+
+  // Edit assistant message (text only, no regeneration)
+  function startAssistantEdit(div, content, histIdx) {
+    if (div.querySelector(".edit-area")) return;
+    const area = document.createElement("textarea");
+    area.className = "edit-area";
+    area.value = content.textContent;
+    content.style.display = "none";
+
+    const actions = document.createElement("div");
+    actions.className = "edit-actions";
+    const saveBtn2 = document.createElement("button");
+    saveBtn2.className = "edit-save";
+    saveBtn2.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "edit-cancel";
+    cancelBtn.textContent = "Cancel";
+    actions.appendChild(saveBtn2);
+    actions.appendChild(cancelBtn);
+    div.appendChild(area);
+    div.appendChild(actions);
+
+    area.style.height = "auto";
+    area.style.height = area.scrollHeight + "px";
+    area.addEventListener("input", () => { area.style.height = "auto"; area.style.height = area.scrollHeight + "px"; });
+    area.focus();
+
+    cancelBtn.addEventListener("click", () => {
+      area.remove(); actions.remove(); content.style.display = "";
+    });
+
+    saveBtn2.addEventListener("click", () => {
+      const newText = area.value.trim();
+      if (!newText) return;
+      content.textContent = newText;
+      content.style.display = "";
+      area.remove(); actions.remove();
+      if (history[histIdx]) history[histIdx].content = newText;
+    });
+  }
+
+  // ── Token count ───────────────────────────────────────────────
+  function updateTokenCount() {
+    const total = history.reduce((a, m) => a + m.content.length, 0);
+    tokenCount.textContent = `~${Math.round(total / 4)} tokens`;
+  }
+
+  // ── Cost & balance ────────────────────────────────────────────
+  function updateCost(inputTokens, outputTokens) {
+    sessionCost += inputTokens * PRICE_INPUT + outputTokens * PRICE_OUTPUT;
+    costCounter.textContent = "$" + sessionCost.toFixed(5);
+    costCounter.classList.add("visible");
+  }
+
+  async function fetchBalance() {
+    try {
+      const data = await fetch("/balance").then(r => r.json());
+      if (data.error) { balanceEl.textContent = "saldo: n/d"; return; }
+      balanceEl.textContent = `saldo: $${data.remaining.toFixed(2)}`;
+      if (data.remaining < 1) balanceEl.classList.add("low");
+      else balanceEl.classList.remove("low");
+    } catch { balanceEl.textContent = "saldo: n/d"; }
+  }
+  fetchBalance();
+  setInterval(fetchBalance, 30000);
+
+  // ── Server check ──────────────────────────────────────────────
   async function checkServer() {
     try { await fetch("/"); dot.classList.add("online"); }
     catch { dot.classList.remove("online"); }
   }
   checkServer();
 
+  // ── Input auto-resize ─────────────────────────────────────────
   promptEl.addEventListener("input", () => {
     promptEl.style.height = "auto";
     promptEl.style.height = Math.min(promptEl.scrollHeight, 160) + "px";
   });
-
   promptEl.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); triggerSend(); }
   });
 
-  sendBtn.addEventListener("click", send);
+  sendBtn.addEventListener("click", triggerSend);
   stopBtn.addEventListener("click", () => { if (abortController) abortController.abort(); });
   clearBtn.addEventListener("click", () => {
-    history = [];
+    history = []; currentConvId = null;
     messagesEl.innerHTML = "";
     sessionCost = 0;
     costCounter.textContent = "$0.00000";
     costCounter.classList.remove("visible");
+    tokenCount.textContent = "";
+    renderConvList();
   });
 
-  function addMessage(role, text, historyRef) {
-    const div = document.createElement("div");
-    div.className = `message ${role}`;
-
-    if (role === "assistant") {
-      const label = document.createElement("div");
-      label.className = "label";
-      const labelText = document.createElement("span");
-      labelText.textContent = "Gemma";
-      label.appendChild(labelText);
-
-      // Edit button
-      const editBtn = document.createElement("button");
-      editBtn.className = "edit-btn";
-      editBtn.textContent = "edit";
-      label.appendChild(editBtn);
-      div.appendChild(label);
-
-      const content = document.createElement("div");
-      content.className = "content";
-      content.textContent = text;
-      div.appendChild(content);
-
-      editBtn.addEventListener("click", () => {
-        if (div.querySelector(".edit-area")) return; // already editing
-
-        const area = document.createElement("textarea");
-        area.className = "edit-area";
-        area.value = content.textContent;
-        content.style.display = "none";
-
-        const actions = document.createElement("div");
-        actions.className = "edit-actions";
-
-        const saveBtn = document.createElement("button");
-        saveBtn.className = "edit-save";
-        saveBtn.textContent = "Save";
-
-        const cancelBtn = document.createElement("button");
-        cancelBtn.className = "edit-cancel";
-        cancelBtn.textContent = "Cancel";
-
-        actions.appendChild(saveBtn);
-        actions.appendChild(cancelBtn);
-        div.appendChild(area);
-        div.appendChild(actions);
-
-        // Altezza automatica sul contenuto
-        area.style.height = "auto";
-        area.style.height = area.scrollHeight + "px";
-        area.addEventListener("input", () => {
-          area.style.height = "auto";
-          area.style.height = area.scrollHeight + "px";
-        });
-
-        area.focus();
-
-        cancelBtn.addEventListener("click", () => {
-          area.remove();
-          actions.remove();
-          content.style.display = "";
-        });
-
-        saveBtn.addEventListener("click", () => {
-          const newText = area.value.trim();
-          if (!newText) return;
-          content.textContent = newText;
-          content.style.display = "";
-          area.remove();
-          actions.remove();
-          // Update history in place via ref
-          if (historyRef && historyRef.entry) {
-            historyRef.entry.content = newText;
-          }
-        });
-      });
-
-      messagesEl.appendChild(div);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-      return content;
-
-    } else {
-      const content = document.createElement("div");
-      content.className = "content";
-      content.textContent = text;
-      div.appendChild(content);
-      messagesEl.appendChild(div);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-      return content;
-    }
-  }
-
-  async function send() {
+  function triggerSend() {
     const text = promptEl.value.trim();
     if (!text || busy) return;
+    promptEl.value = "";
+    promptEl.style.height = "auto";
+    sendMessage(text);
+  }
 
+  // ── Send ──────────────────────────────────────────────────────
+  async function sendMessage(text) {
     busy = true;
     sendBtn.disabled = true;
     stopBtn.style.display = "flex";
-    promptEl.value = "";
-    promptEl.style.height = "auto";
-    abortController = new AbortController();
 
-    addMessage("user", text);
+    const userHistIdx = history.length;
     history.push({ role: "user", content: text });
+    renderUserMessage(text, userHistIdx);
 
-    const historyRef = {};
-    const contentEl = addMessage("assistant", "", historyRef);
+    const assistantHistIdx = history.length;
+    history.push({ role: "assistant", content: "" });
+
+    // Render assistant placeholder
+    const div = document.createElement("div");
+    div.className = "message assistant";
+    div.dataset.histIdx = assistantHistIdx;
+
+    const label = document.createElement("div");
+    label.className = "label";
+    const labelText = document.createElement("span");
+    labelText.textContent = "Gemma";
+    label.appendChild(labelText);
+    const editBtnEl = document.createElement("button");
+    editBtnEl.className = "edit-btn";
+    editBtnEl.textContent = "edit";
+    label.appendChild(editBtnEl);
+    div.appendChild(label);
+
+    const contentEl = document.createElement("div");
+    contentEl.className = "content";
     const typingEl = document.createElement("span");
     typingEl.className = "typing";
     typingEl.textContent = "···";
     contentEl.appendChild(typingEl);
+    div.appendChild(contentEl);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    editBtnEl.addEventListener("click", () => startAssistantEdit(div, contentEl, assistantHistIdx));
+
+    abortController = new AbortController();
+
+    // Sliding window: send only last MAX_HISTORY messages
+    const historyToSend = history.slice(0, -1); // exclude placeholder
+    const windowedHistory = historyToSend.length > MAX_HISTORY
+      ? historyToSend.slice(historyToSend.length - MAX_HISTORY)
+      : historyToSend;
+
+    let reply = "";
 
     try {
       const res = await fetch("/chat", {
@@ -564,15 +944,14 @@
         headers: { "Content-Type": "application/json" },
         signal: abortController.signal,
         body: JSON.stringify({
-          messages: history,
-          max_tokens: parseInt(maxTokensSlider.value),
+          messages: windowedHistory,
+          max_tokens: parseInt(maxSlider.value),
           system_prompt: systemEl.value.trim(),
         }),
       });
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let reply = "";
       let buffer = "";
 
       while (true) {
@@ -580,43 +959,39 @@
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
-        buffer = lines.pop(); // keep incomplete line for next chunk
+        buffer = lines.pop();
         for (const line of lines) {
           if (line.startsWith("data: ") && line !== "data: [DONE]") {
             const data = JSON.parse(line.slice(6));
-            if (data.error) {
-              typingEl.remove();
-              contentEl.textContent = `Error: ${data.error}`;
-            }
-            if (data.usage) {
-              updateCost(data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
-            }
+            if (data.usage) updateCost(data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
             if (data.token) {
               typingEl.remove();
               reply += data.token;
               contentEl.textContent = reply;
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
+            if (data.error) {
+              typingEl.remove();
+              contentEl.textContent = `Errore: ${data.error}`;
+            }
           }
         }
       }
-
-      const entry = { role: "assistant", content: reply };
-      historyRef.entry = entry;
-      history.push(entry);
-
-      // Rough token estimate (~4 chars per token)
-      const totalChars = history.reduce((acc, m) => acc + m.content.length, 0);
-      const est = Math.round(totalChars / 4);
-      tokenCount.textContent = `~${est} tokens`;
     } catch (err) {
       typingEl.remove();
       if (err.name === "AbortError") {
         if (!reply) contentEl.textContent = "[generazione interrotta]";
       } else {
-        contentEl.textContent = "Error: server not responding.";
+        contentEl.textContent = "Errore: server non raggiungibile.";
       }
     }
+
+    // Update history with actual reply
+    history[assistantHistIdx].content = reply;
+    updateTokenCount();
+
+    // Auto-save after each exchange
+    saveCurrentConversation();
 
     busy = false;
     sendBtn.disabled = false;
