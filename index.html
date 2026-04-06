@@ -29,10 +29,29 @@
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-      transition: width 0.2s;
+      transition: transform 0.25s, width 0.25s;
       overflow: hidden;
     }
     #sidebar.collapsed { width: 0; }
+
+    @media (max-width: 640px) {
+      #sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        z-index: 50;
+        width: 280px;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+      }
+      #sidebar.open { transform: translateX(0); }
+      #sidebar-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.3);
+        z-index: 40;
+      }
+      #sidebar-overlay.visible { display: block; }
+    }
 
     #sidebar-header {
       padding: 16px;
@@ -473,6 +492,9 @@
 </head>
 <body>
 
+<!-- Sidebar overlay (mobile) -->
+<div id="sidebar-overlay"></div>
+
 <!-- Sidebar -->
 <div id="sidebar">
   <div id="sidebar-header">
@@ -507,8 +529,8 @@
 
   <div id="tokens-row">
     <label>Max tokens</label>
-    <input type="range" id="max-tokens-slider" min="128" max="4096" step="128" value="512" />
-    <span id="max-tokens-value">512</span>
+    <input type="range" id="max-tokens-slider" min="128" max="4096" step="128" value="2048" />
+    <span id="max-tokens-value">2048</span>
   </div>
 
   <div id="messages"></div>
@@ -587,7 +609,21 @@
   });
 
   // ── Sidebar ───────────────────────────────────────────────────
-  sidebarToggle.addEventListener("click", () => sidebarEl.classList.toggle("collapsed"));
+  const sidebarOverlay = document.getElementById("sidebar-overlay");
+  const isMobile = () => window.innerWidth <= 640;
+
+  sidebarToggle.addEventListener("click", () => {
+    if (isMobile()) {
+      sidebarEl.classList.toggle("open");
+      sidebarOverlay.classList.toggle("visible", sidebarEl.classList.contains("open"));
+    } else {
+      sidebarEl.classList.toggle("collapsed");
+    }
+  });
+  sidebarOverlay.addEventListener("click", () => {
+    sidebarEl.classList.remove("open");
+    sidebarOverlay.classList.remove("visible");
+  });
 
   // ── Conversations (localStorage) ─────────────────────────────
   function getConversations() {
