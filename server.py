@@ -28,7 +28,7 @@ GOOGLE_AI_BASE_URL       = "https://generativelanguage.googleapis.com/v1beta/ope
 OPENROUTER_ALLOWED_MODELS = {
     "google/gemma-4-31b-it",
     "google/gemma-3-27b-it",
-    "deepseek/deepseek-v3",
+    "deepseek/deepseek-v3.2",
 }
 
 # Modelli Google AI Studio disponibili
