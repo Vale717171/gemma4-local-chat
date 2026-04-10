@@ -70,6 +70,10 @@ def chat():
         "stream": True,
     }
 
+    # Disabilita il thinking di Gemma 4 su Google AI Studio (evita costi extra)
+    if backend == "google":
+        payload["thinking_config"] = {"thinking_budget": 0}
+
     @stream_with_context
     def generate():
         # State machine for filtering <thought>...</thought> blocks (Google backend)
