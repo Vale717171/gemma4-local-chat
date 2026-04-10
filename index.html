@@ -739,7 +739,7 @@
     messagesEl.innerHTML = "";
     for (const msg of history) {
       if (msg.role === "user") renderUserMessage(msg.content, history.indexOf(msg));
-      else renderAssistantMessage(msg.content, history.indexOf(msg));
+      else renderAssistantMessage(msg.content, history.indexOf(msg), msg.model);
     }
     updateTokenCount();
     renderConvList();
@@ -823,7 +823,7 @@
     return div;
   }
 
-  function renderAssistantMessage(text, histIdx) {
+  function renderAssistantMessage(text, histIdx, modelLabel) {
     const div = document.createElement("div");
     div.className = "message assistant";
     div.dataset.histIdx = histIdx;
@@ -831,7 +831,7 @@
     const label = document.createElement("div");
     label.className = "label";
     const labelText = document.createElement("span");
-    labelText.textContent = "Gemma";
+    labelText.textContent = modelLabel || "Gemma";
     label.appendChild(labelText);
 
     const editBtn = document.createElement("button");
@@ -1015,7 +1015,8 @@
     renderUserMessage(text, userHistIdx);
 
     const assistantHistIdx = history.length;
-    history.push({ role: "assistant", content: "" });
+    const activeModelLabel = getCurrentModelDef().label;
+    history.push({ role: "assistant", content: "", model: activeModelLabel });
 
     // Render assistant placeholder
     const div = document.createElement("div");
@@ -1025,7 +1026,7 @@
     const label = document.createElement("div");
     label.className = "label";
     const labelText = document.createElement("span");
-    labelText.textContent = "Gemma";
+    labelText.textContent = activeModelLabel;
     label.appendChild(labelText);
     const editBtnEl = document.createElement("button");
     editBtnEl.className = "edit-btn";
