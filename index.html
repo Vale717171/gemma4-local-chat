@@ -191,6 +191,19 @@
     }
     #balance-display.low { color: #f59e0b; }
 
+    #backend-select {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #9ca3af;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 2px;
+      outline: none;
+    }
+    #backend-select:hover { color: #6b7280; }
+
     /* ── System prompt panel ── */
     #system-panel {
       border-bottom: 1px solid #e5e5e5;
@@ -509,7 +522,10 @@
     <button id="sidebar-toggle" title="Conversazioni">☰</button>
     <div id="dot"></div>
     <h1>Gemma 4 31B</h1>
-    <span class="sub">OpenRouter</span>
+    <select id="backend-select" title="Backend">
+      <option value="openrouter">OpenRouter</option>
+      <option value="google">Google AI Studio</option>
+    </select>
     <span id="token-count"></span>
     <span id="cost-counter">$0.00000</span>
     <span id="balance-display">saldo: …</span>
@@ -569,11 +585,17 @@
   const sidebarToggle= document.getElementById("sidebar-toggle");
   const newChatBtn   = document.getElementById("new-chat-btn");
   const convList     = document.getElementById("conv-list");
-  const resetSystem  = document.getElementById("reset-system");
+  const resetSystem   = document.getElementById("reset-system");
+  const backendSelect = document.getElementById("backend-select");
 
-  // ── Constants ─────────────────────────────────────────────────
-  const PRICE_INPUT   = 0.14 / 1_000_000;
-  const PRICE_OUTPUT  = 0.40 / 1_000_000;
+  // ── Pricing per backend ($ per token) ─────────────────────────
+  // OpenRouter: Gemma 4 31B — $0.14/1M input, $0.40/1M output
+  // Google AI Studio: Gemma 4 31B — $0.10/1M input, $0.35/1M output
+  // (verifica i prezzi su ai.google.dev/pricing se aggiornati)
+  const PRICING = {
+    openrouter: { input: 0.14 / 1_000_000, output: 0.40 / 1_000_000 },
+    google:     { input: 0.14 / 1_000_000, output: 0.40 / 1_000_000 },
+  };
   const MAX_HISTORY   = 20; // max messages sent to API
   const MAX_SAVED     = 50; // max saved conversations
 
@@ -591,6 +613,18 @@
   let sessionCost    = 0;
   let abortController= null;
   let currentConvId  = null;
+  let currentBackend = localStorage.getItem("backend") || "openrouter";
+
+  backendSelect.value = currentBackend;
+
+  backendSelect.addEventListener("change", () => {
+    currentBackend = backendSelect.value;
+    localStorage.setItem("backend", currentBackend);
+    sessionCost = 0;
+    costCounter.textContent = "$0.00000";
+    costCounter.classList.remove("visible");
+    fetchBalance();
+  });
 
   // ── Slider ────────────────────────────────────────────────────
   maxSlider.addEventListener("input", () => maxValue.textContent = maxSlider.value);
@@ -870,14 +904,20 @@
 
   // ── Cost & balance ────────────────────────────────────────────
   function updateCost(inputTokens, outputTokens) {
-    sessionCost += inputTokens * PRICE_INPUT + outputTokens * PRICE_OUTPUT;
+    const p = PRICING[currentBackend] || PRICING.openrouter;
+    sessionCost += inputTokens * p.input + outputTokens * p.output;
     costCounter.textContent = "$" + sessionCost.toFixed(5);
     costCounter.classList.add("visible");
   }
 
   async function fetchBalance() {
     try {
-      const data = await fetch("/balance").then(r => r.json());
+      const data = await fetch(`/balance?backend=${currentBackend}`).then(r => r.json());
+      if (data.type === "pay-per-use") {
+        balanceEl.textContent = "pay-per-use";
+        balanceEl.classList.remove("low");
+        return;
+      }
       if (data.error) { balanceEl.textContent = "saldo: n/d"; return; }
       balanceEl.textContent = `saldo: $${data.remaining.toFixed(2)}`;
       if (data.remaining < 1) balanceEl.classList.add("low");
@@ -983,6 +1023,7 @@
           messages: windowedHistory,
           max_tokens: parseInt(maxSlider.value),
           system_prompt: systemEl.value.trim(),
+          backend: currentBackend,
         }),
       });
 

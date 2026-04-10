@@ -12,7 +12,17 @@ except ImportError:
     OPENROUTER_API_KEY = ""
     print("openrouter_config.py not found — add your API key there.")
 
-MODEL = "google/gemma-4-31b-it"
+# ── Google AI Studio config (local only, never pushed) ────────
+try:
+    from google_aistudio_config import GOOGLE_AI_STUDIO_API_KEY
+    print("Google AI Studio config loaded.")
+except ImportError:
+    GOOGLE_AI_STUDIO_API_KEY = ""
+    print("google_aistudio_config.py not found — add your API key there.")
+
+OPENROUTER_MODEL  = "google/gemma-4-31b-it"
+GOOGLE_MODEL      = "gemma-4-31b-it"
+GOOGLE_AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 
 # ── Routes ────────────────────────────────────────────────────
@@ -24,24 +34,37 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    messages = data.get("messages", [])
-    max_tokens = data.get("max_tokens", 512)
+    messages    = data.get("messages", [])
+    max_tokens  = data.get("max_tokens", 512)
     system_prompt = data.get("system_prompt", "")
+    backend     = data.get("backend", "openrouter")
 
     api_messages = []
     if system_prompt:
         api_messages.append({"role": "system", "content": system_prompt})
     api_messages.extend(messages)
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "http://127.0.0.1:5001",
-        "X-Title": "Gemma 4 Chat",
-    }
+    if backend == "google":
+        api_url = f"{GOOGLE_AI_BASE_URL}/chat/completions"
+        api_key = GOOGLE_AI_STUDIO_API_KEY
+        model   = GOOGLE_MODEL
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+    else:
+        api_url = "https://openrouter.ai/api/v1/chat/completions"
+        api_key = OPENROUTER_API_KEY
+        model   = OPENROUTER_MODEL
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://127.0.0.1:5001",
+            "X-Title": "Gemma 4 Chat",
+        }
 
     payload = {
-        "model": MODEL,
+        "model": model,
         "messages": api_messages,
         "max_tokens": max_tokens,
         "stream": True,
@@ -51,7 +74,7 @@ def chat():
     def generate():
         try:
             with requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                api_url,
                 headers=headers,
                 json=payload,
                 stream=True,
@@ -67,14 +90,26 @@ def chat():
                             break
                         try:
                             chunk = json.loads(chunk_str)
-                            token = chunk["choices"][0]["delta"].get("content", "")
+                            if "error" in chunk:
+                                err_msg = chunk["error"].get("message", str(chunk["error"]))
+                                print(f"[{backend} error] {err_msg}")
+                                yield f"data: {json.dumps({'error': err_msg})}\n\n"
+                                break
+                            choices = chunk.get("choices", [])
+                            if not choices:
+                                print(f"[{backend}] chunk senza choices: {chunk_str[:200]}")
+                                continue
+                            token = choices[0]["delta"].get("content", "")
                             if token:
                                 yield f"data: {json.dumps({'token': token})}\n\n"
-                            # OpenRouter invia usage nell'ultimo chunk
+                            finish = choices[0].get("finish_reason")
+                            if finish and finish != "null":
+                                print(f"[{backend}] finish_reason: {finish}")
                             usage = chunk.get("usage")
                             if usage:
                                 yield f"data: {json.dumps({'usage': usage})}\n\n"
-                        except Exception:
+                        except Exception as e:
+                            print(f"[parse error] {e} — raw: {chunk_str[:200]}")
                             continue
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -86,6 +121,13 @@ def chat():
 
 @app.route("/balance")
 def balance():
+    backend = request.args.get("backend", "openrouter")
+
+    if backend == "google":
+        # Google AI Studio è pay-per-use, nessun credito da monitorare
+        return {"type": "pay-per-use"}
+
+    # OpenRouter: legge il saldo residuo
     try:
         r = requests.get(
             "https://openrouter.ai/api/v1/credits",
@@ -93,8 +135,8 @@ def balance():
             timeout=10,
         )
         data = r.json().get("data", {})
-        total = data.get("total_credits", 0)
-        usage = data.get("total_usage", 0)
+        total   = data.get("total_credits", 0)
+        usage   = data.get("total_usage", 0)
         remaining = round(total - usage, 4)
         return {"remaining": remaining}
     except Exception as e:

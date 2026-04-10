@@ -1,5 +1,6 @@
 runpod_config.py
 openrouter_config.py
+google_aistudio_config.py
 __pycache__/
 *.py[cod]
 *.icns
