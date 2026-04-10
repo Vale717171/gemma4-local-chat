@@ -72,6 +72,44 @@ def chat():
 
     @stream_with_context
     def generate():
+        # State machine for filtering <thought>...</thought> blocks (Google backend)
+        th_state = {"in_thought": False, "buf": ""}
+
+        def filter_thought(token):
+            """Remove <thought>...</thought> from streaming tokens. Returns text to emit."""
+            s = th_state
+            s["buf"] += token
+            out = []
+
+            while True:
+                if s["in_thought"]:
+                    end = s["buf"].find("</thought>")
+                    if end != -1:
+                        # Skip past the closing tag; strip leading newline
+                        s["buf"] = s["buf"][end + len("</thought>"):].lstrip("\n")
+                        s["in_thought"] = False
+                    else:
+                        # Still inside thought block — discard buffered content
+                        # Keep only the tail in case </thought> is split across chunks
+                        keep = len("</thought>") - 1
+                        s["buf"] = s["buf"][-keep:] if len(s["buf"]) > keep else s["buf"]
+                        break
+                else:
+                    start = s["buf"].find("<thought>")
+                    if start != -1:
+                        out.append(s["buf"][:start])
+                        s["buf"] = s["buf"][start + len("<thought>"):]
+                        s["in_thought"] = True
+                    else:
+                        # Emit all except chars that could be a partial opening tag
+                        keep = len("<thought>") - 1
+                        if len(s["buf"]) > keep:
+                            out.append(s["buf"][:-keep])
+                            s["buf"] = s["buf"][-keep:]
+                        break
+
+            return "".join(out)
+
         try:
             with requests.post(
                 api_url,
@@ -101,7 +139,10 @@ def chat():
                                 continue
                             token = choices[0]["delta"].get("content", "")
                             if token:
-                                yield f"data: {json.dumps({'token': token})}\n\n"
+                                if backend == "google":
+                                    token = filter_thought(token)
+                                if token:
+                                    yield f"data: {json.dumps({'token': token})}\n\n"
                             finish = choices[0].get("finish_reason")
                             if finish and finish != "null":
                                 print(f"[{backend}] finish_reason: {finish}")
@@ -113,6 +154,9 @@ def chat():
                             continue
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        # Flush any remaining buffer after stream ends
+        if backend == "google" and th_state["buf"] and not th_state["in_thought"]:
+            yield f"data: {json.dumps({'token': th_state['buf']})}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype="text/event-stream",
