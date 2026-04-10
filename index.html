@@ -333,11 +333,20 @@
     .message.user {
       position: relative;
     }
-    .user-edit-btn {
+    .user-actions {
       position: absolute;
-      left: -32px;
+      left: -36px;
       top: 50%;
       transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .message.user:hover .user-actions { opacity: 1; }
+
+    .user-edit-btn, .user-del-btn {
       background: none;
       border: 1px solid #e5e5e5;
       border-radius: 6px;
@@ -346,15 +355,14 @@
       padding: 2px 6px;
       cursor: pointer;
       font-family: inherit;
-      opacity: 0;
-      transition: opacity 0.15s, color 0.15s;
       white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
     }
-    .message.user:hover .user-edit-btn { opacity: 1; }
     .user-edit-btn:hover { color: #2563eb; border-color: #2563eb; }
+    .user-del-btn:hover  { color: #ef4444; border-color: #ef4444; }
 
     /* Edit button on assistant messages */
-    .edit-btn {
+    .edit-btn, .del-btn {
       background: none;
       border: 1px solid #e5e5e5;
       border-radius: 6px;
@@ -366,6 +374,7 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .edit-btn:hover { color: #2563eb; border-color: #2563eb; }
+    .del-btn:hover  { color: #ef4444; border-color: #ef4444; }
 
     .edit-area {
       width: 100%;
@@ -600,16 +609,12 @@
   // ── Modelli disponibili per backend ───────────────────────────
   const MODELS = {
     openrouter: [
-      { id: "google/gemma-4-31b-it",                    label: "Gemma 4 31B",       input: 0.14, output: 0.40 },
-      { id: "google/gemini-2.0-flash-001",               label: "Gemini 2.0 Flash",  input: 0.10, output: 0.40 },
-      { id: "google/gemini-2.5-flash-preview:thinking",  label: "Gemini 2.5 Flash",  input: 0.15, output: 0.60 },
-      { id: "google/gemma-3-27b-it",                     label: "Gemma 3 27B",       input: 0.10, output: 0.20 },
+      { id: "google/gemma-4-31b-it", label: "Gemma 4 31B", input: 0.14, output: 0.40 },
+      { id: "google/gemma-3-27b-it", label: "Gemma 3 27B", input: 0.10, output: 0.20 },
     ],
     google: [
-      { id: "gemma-4-31b-it",                  label: "Gemma 4 31B",       input: 0.14, output: 0.40 },
-      { id: "gemini-2.0-flash",                label: "Gemini 2.0 Flash",  input: 0.10, output: 0.40 },
-      { id: "gemini-2.5-flash-preview-04-17",  label: "Gemini 2.5 Flash",  input: 0.15, output: 0.60 },
-      { id: "gemma-3-27b-it",                  label: "Gemma 3 27B",       input: 0.10, output: 0.20 },
+      { id: "gemma-4-31b-it", label: "Gemma 4 31B", input: 0.14, output: 0.40 },
+      { id: "gemma-3-27b-it", label: "Gemma 3 27B", input: 0.10, output: 0.20 },
     ],
   };
 
@@ -801,22 +806,47 @@
   });
 
   // ── Rendering ─────────────────────────────────────────────────
+  function deleteMessage(histIdx) {
+    history.splice(histIdx, 1);
+    rerenderMessages();
+    updateTokenCount();
+  }
+
+  function rerenderMessages() {
+    messagesEl.innerHTML = "";
+    for (let i = 0; i < history.length; i++) {
+      const msg = history[i];
+      if (msg.role === "user") renderUserMessage(msg.content, i);
+      else renderAssistantMessage(msg.content, i, msg.model);
+    }
+  }
+
   function renderUserMessage(text, histIdx) {
     const div = document.createElement("div");
     div.className = "message user";
     div.dataset.histIdx = histIdx;
 
+    const actions = document.createElement("div");
+    actions.className = "user-actions";
+
     const editBtn = document.createElement("button");
     editBtn.className = "user-edit-btn";
     editBtn.textContent = "edit";
-    div.appendChild(editBtn);
+    editBtn.addEventListener("click", () => startUserEdit(div, content, histIdx));
+    actions.appendChild(editBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "user-del-btn";
+    delBtn.textContent = "del";
+    delBtn.addEventListener("click", () => deleteMessage(histIdx));
+    actions.appendChild(delBtn);
+
+    div.appendChild(actions);
 
     const content = document.createElement("div");
     content.className = "content";
     content.textContent = text;
     div.appendChild(content);
-
-    editBtn.addEventListener("click", () => startUserEdit(div, content, histIdx));
 
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -837,15 +867,21 @@
     const editBtn = document.createElement("button");
     editBtn.className = "edit-btn";
     editBtn.textContent = "edit";
+    editBtn.addEventListener("click", () => startAssistantEdit(div, content, histIdx));
     label.appendChild(editBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "del-btn";
+    delBtn.textContent = "del";
+    delBtn.addEventListener("click", () => deleteMessage(histIdx));
+    label.appendChild(delBtn);
+
     div.appendChild(label);
 
     const content = document.createElement("div");
     content.className = "content";
     content.textContent = text;
     div.appendChild(content);
-
-    editBtn.addEventListener("click", () => startAssistantEdit(div, content, histIdx));
 
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1031,7 +1067,15 @@
     const editBtnEl = document.createElement("button");
     editBtnEl.className = "edit-btn";
     editBtnEl.textContent = "edit";
+    editBtnEl.addEventListener("click", () => startAssistantEdit(div, contentEl, assistantHistIdx));
     label.appendChild(editBtnEl);
+
+    const delBtnEl = document.createElement("button");
+    delBtnEl.className = "del-btn";
+    delBtnEl.textContent = "del";
+    delBtnEl.addEventListener("click", () => deleteMessage(assistantHistIdx));
+    label.appendChild(delBtnEl);
+
     div.appendChild(label);
 
     const contentEl = document.createElement("div");
@@ -1043,8 +1087,6 @@
     div.appendChild(contentEl);
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
-
-    editBtnEl.addEventListener("click", () => startAssistantEdit(div, contentEl, assistantHistIdx));
 
     abortController = new AbortController();
 
