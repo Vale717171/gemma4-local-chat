@@ -20,9 +20,25 @@ except ImportError:
     GOOGLE_AI_STUDIO_API_KEY = ""
     print("google_aistudio_config.py not found — add your API key there.")
 
-OPENROUTER_MODEL  = "google/gemma-4-31b-it"
-GOOGLE_MODEL      = "gemma-4-31b-it"
-GOOGLE_AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+OPENROUTER_DEFAULT_MODEL = "google/gemma-4-31b-it"
+GOOGLE_DEFAULT_MODEL     = "gemma-4-31b-it"
+GOOGLE_AI_BASE_URL       = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+# Modelli OpenRouter disponibili (prefisso google/)
+OPENROUTER_ALLOWED_MODELS = {
+    "google/gemma-4-31b-it",
+    "google/gemini-2.0-flash-001",
+    "google/gemini-2.5-flash-preview:thinking",
+    "google/gemma-3-27b-it",
+}
+
+# Modelli Google AI Studio disponibili
+GOOGLE_ALLOWED_MODELS = {
+    "gemma-4-31b-it",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash-preview-04-17",
+    "gemma-3-27b-it",
+}
 
 
 # ── Routes ────────────────────────────────────────────────────
@@ -34,10 +50,11 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    messages    = data.get("messages", [])
-    max_tokens  = data.get("max_tokens", 512)
+    messages      = data.get("messages", [])
+    max_tokens    = data.get("max_tokens", 512)
     system_prompt = data.get("system_prompt", "")
-    backend     = data.get("backend", "openrouter")
+    backend       = data.get("backend", "openrouter")
+    requested_model = data.get("model", "")
 
     api_messages = []
     if system_prompt:
@@ -47,7 +64,7 @@ def chat():
     if backend == "google":
         api_url = f"{GOOGLE_AI_BASE_URL}/chat/completions"
         api_key = GOOGLE_AI_STUDIO_API_KEY
-        model   = GOOGLE_MODEL
+        model   = requested_model if requested_model in GOOGLE_ALLOWED_MODELS else GOOGLE_DEFAULT_MODEL
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -55,7 +72,7 @@ def chat():
     else:
         api_url = "https://openrouter.ai/api/v1/chat/completions"
         api_key = OPENROUTER_API_KEY
-        model   = OPENROUTER_MODEL
+        model   = requested_model if requested_model in OPENROUTER_ALLOWED_MODELS else OPENROUTER_DEFAULT_MODEL
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
