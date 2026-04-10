@@ -27,9 +27,8 @@ GOOGLE_AI_BASE_URL       = "https://generativelanguage.googleapis.com/v1beta/ope
 # Modelli OpenRouter disponibili (prefisso google/)
 OPENROUTER_ALLOWED_MODELS = {
     "google/gemma-4-31b-it",
-    "google/gemini-2.0-flash-001",
-    "google/gemini-2.5-flash-preview:thinking",
     "google/gemma-3-27b-it",
+    "deepseek/deepseek-v3",
 }
 
 # Modelli Google AI Studio disponibili
