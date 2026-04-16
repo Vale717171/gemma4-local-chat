@@ -513,6 +513,105 @@
     }
     #save-btn:hover { border-color: #22c55e; color: #16a34a; }
 
+    #attach-btn {
+      background: none;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      width: 40px; height: 40px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 15px;
+      transition: border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    #attach-btn:hover { border-color: #2563eb; color: #2563eb; }
+    #attachment-input { display: none; }
+
+    #attachment-strip {
+      display: none;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 20px 0;
+      border-top: 1px solid #e5e5e5;
+      background: #ffffff;
+    }
+    #attachment-strip.visible { display: flex; }
+
+    .attachment-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      background: #fafafa;
+      padding: 6px 8px;
+      min-width: 180px;
+      max-width: 260px;
+      flex-shrink: 0;
+    }
+    .attachment-pill img, .attachment-pill video {
+      width: 40px;
+      height: 40px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #e5e7eb;
+      flex-shrink: 0;
+    }
+    .attachment-pill .meta {
+      min-width: 0;
+      flex: 1;
+    }
+    .attachment-pill .name {
+      font-size: 12px;
+      color: #374151;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .attachment-pill .type {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    .attachment-remove {
+      border: none;
+      background: none;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 14px;
+      flex-shrink: 0;
+      padding: 0 2px;
+    }
+    .attachment-remove:hover { color: #ef4444; }
+
+    .message-attachments {
+      margin-top: 8px;
+      display: grid;
+      gap: 8px;
+    }
+    .msg-attachment {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.1);
+      max-width: 280px;
+    }
+    .msg-attachment img, .msg-attachment video {
+      display: block;
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      background: #e5e7eb;
+    }
+    .msg-attachment .fallback {
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #e5e7eb;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e5e5e5; border-radius: 2px; }
@@ -567,10 +666,13 @@
   </div>
 
   <div id="messages"></div>
+  <div id="attachment-strip"></div>
 
   <div id="input-area">
     <button id="clear" title="Nuova chat">✕</button>
     <button id="save-btn" title="Salva conversazione">💾</button>
+    <button id="attach-btn" title="Allega immagini o video">📎</button>
+    <input id="attachment-input" type="file" accept="image/*,video/*" multiple />
     <textarea id="prompt" rows="1" placeholder="Message Gemma…"></textarea>
     <button id="send">
       <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
@@ -590,6 +692,9 @@
   const stopBtn      = document.getElementById("stop");
   const clearBtn     = document.getElementById("clear");
   const saveBtn      = document.getElementById("save-btn");
+  const attachBtn    = document.getElementById("attach-btn");
+  const attachInput  = document.getElementById("attachment-input");
+  const attachStrip  = document.getElementById("attachment-strip");
   const dot          = document.getElementById("dot");
   const toggleBtn    = document.getElementById("system-toggle");
   const systemBody   = document.getElementById("system-body");
@@ -616,6 +721,8 @@
     google: [
       { id: "gemma-4-31b-it", label: "Gemma 4 31B", input: 0.14, output: 0.40 },
       { id: "gemma-3-27b-it", label: "Gemma 3 27B", input: 0.10, output: 0.20 },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", input: 0.10, output: 0.40 },
+      { id: "gemini-2.5-flash-preview-04-17", label: "Gemini 2.5 Flash", input: 0.15, output: 0.60 },
     ],
   };
 
@@ -655,6 +762,10 @@
   let abortController= null;
   let currentConvId  = null;
   let currentBackend = localStorage.getItem("backend") || "openrouter";
+  let pendingAttachments = [];
+
+  const MAX_ATTACHMENTS = 4;
+  const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
   backendSelect.value = currentBackend;
   populateModelSelect(currentBackend);
@@ -712,6 +823,22 @@
     catch { return []; }
   }
 
+  function toStorableMessage(msg) {
+    const attachments = (msg.attachments || []).map(a => ({
+      type: a.type,
+      name: a.name,
+      mimeType: a.mimeType,
+      size: a.size,
+      unavailable: true,
+    }));
+    return {
+      role: msg.role,
+      content: msg.content || "",
+      model: msg.model,
+      attachments,
+    };
+  }
+
   function saveCurrentConversation() {
     if (history.length === 0) return;
     const convs = getConversations();
@@ -720,7 +847,12 @@
     const id = currentConvId || Date.now().toString();
     currentConvId = id;
     const existing = convs.findIndex(c => c.id === id);
-    const conv = { id, title, date: new Date().toISOString(), messages: [...history] };
+    const conv = {
+      id,
+      title,
+      date: new Date().toISOString(),
+      messages: history.map(toStorableMessage),
+    };
     if (existing >= 0) convs[existing] = conv;
     else convs.unshift(conv);
     localStorage.setItem("conversations", JSON.stringify(convs.slice(0, MAX_SAVED)));
@@ -743,9 +875,11 @@
     costCounter.textContent = "$0.00000";
     costCounter.classList.remove("visible");
     messagesEl.innerHTML = "";
-    for (const msg of history) {
-      if (msg.role === "user") renderUserMessage(msg.content, history.indexOf(msg));
-      else renderAssistantMessage(msg.content, history.indexOf(msg), msg.model);
+    clearPendingAttachments();
+    for (let i = 0; i < history.length; i++) {
+      const msg = history[i];
+      if (msg.role === "user") renderUserMessage(msg.content, i, msg.attachments || []);
+      else renderAssistantMessage(msg.content, i, msg.model);
     }
     updateTokenCount();
     renderConvList();
@@ -813,6 +947,7 @@
     history = [];
     currentConvId = null;
     messagesEl.innerHTML = "";
+    clearPendingAttachments();
     sessionCost = 0;
     costCounter.textContent = "$0.00000";
     costCounter.classList.remove("visible");
@@ -838,12 +973,48 @@
     messagesEl.innerHTML = "";
     for (let i = 0; i < history.length; i++) {
       const msg = history[i];
-      if (msg.role === "user") renderUserMessage(msg.content, i);
+      if (msg.role === "user") renderUserMessage(msg.content, i, msg.attachments || []);
       else renderAssistantMessage(msg.content, i, msg.model);
     }
   }
 
-  function renderUserMessage(text, histIdx) {
+  function renderMessageAttachments(parent, attachments) {
+    if (!attachments || attachments.length === 0) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "message-attachments";
+
+    for (const att of attachments) {
+      const box = document.createElement("div");
+      box.className = "msg-attachment";
+
+      if (att.type === "image" && att.dataUrl) {
+        const img = document.createElement("img");
+        img.src = att.dataUrl;
+        img.alt = att.name || "image";
+        box.appendChild(img);
+      } else if (att.type === "video" && att.dataUrl) {
+        const video = document.createElement("video");
+        video.src = att.dataUrl;
+        video.controls = true;
+        video.preload = "metadata";
+        box.appendChild(video);
+      } else {
+        const fallback = document.createElement("div");
+        fallback.className = "fallback";
+        fallback.textContent = att.unavailable
+          ? `${att.name || "Allegato"} (non disponibile in questa sessione)`
+          : (att.name || "Allegato");
+        box.appendChild(fallback);
+      }
+
+      wrap.appendChild(box);
+    }
+
+    parent.appendChild(wrap);
+  }
+
+  function renderUserMessage(text, histIdx, attachments = []) {
     const div = document.createElement("div");
     div.className = "message user";
     div.dataset.histIdx = histIdx;
@@ -869,6 +1040,7 @@
     content.className = "content";
     content.textContent = text;
     div.appendChild(content);
+    renderMessageAttachments(div, attachments);
 
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -997,9 +1169,107 @@
 
   // ── Token count ───────────────────────────────────────────────
   function updateTokenCount() {
-    const total = history.reduce((a, m) => a + m.content.length, 0);
+    const total = history.reduce((a, m) => a + (m.content || "").length, 0);
     tokenCount.textContent = `~${Math.round(total / 4)} tokens`;
   }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function clearPendingAttachments() {
+    pendingAttachments = [];
+    attachInput.value = "";
+    renderAttachmentStrip();
+  }
+
+  function renderAttachmentStrip() {
+    attachStrip.innerHTML = "";
+    attachStrip.classList.toggle("visible", pendingAttachments.length > 0);
+    for (const att of pendingAttachments) {
+      const pill = document.createElement("div");
+      pill.className = "attachment-pill";
+
+      if (att.type === "image") {
+        const img = document.createElement("img");
+        img.src = att.dataUrl;
+        img.alt = att.name;
+        pill.appendChild(img);
+      } else {
+        const video = document.createElement("video");
+        video.src = att.dataUrl;
+        video.muted = true;
+        video.preload = "metadata";
+        pill.appendChild(video);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = att.name;
+      const type = document.createElement("div");
+      type.className = "type";
+      type.textContent = `${att.type} • ${formatFileSize(att.size)}`;
+      meta.appendChild(name);
+      meta.appendChild(type);
+      pill.appendChild(meta);
+
+      const remove = document.createElement("button");
+      remove.className = "attachment-remove";
+      remove.title = "Rimuovi allegato";
+      remove.textContent = "✕";
+      remove.addEventListener("click", () => {
+        pendingAttachments = pendingAttachments.filter(x => x.id !== att.id);
+        renderAttachmentStrip();
+      });
+      pill.appendChild(remove);
+
+      attachStrip.appendChild(pill);
+    }
+  }
+
+  function readAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  attachBtn.addEventListener("click", () => attachInput.click());
+  attachInput.addEventListener("change", async (e) => {
+    const files = [...(e.target.files || [])];
+    if (files.length === 0) return;
+    if (pendingAttachments.length + files.length > MAX_ATTACHMENTS) {
+      alert(`Puoi allegare massimo ${MAX_ATTACHMENTS} file per messaggio.`);
+      attachInput.value = "";
+      return;
+    }
+    for (const file of files) {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      if (!isImage && !isVideo) continue;
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        alert(`${file.name} supera il limite di 20MB.`);
+        continue;
+      }
+      const dataUrl = await readAsDataUrl(file);
+      pendingAttachments.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: isImage ? "image" : "video",
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        dataUrl,
+      });
+    }
+    attachInput.value = "";
+    renderAttachmentStrip();
+  });
 
   // ── Cost & balance ────────────────────────────────────────────
   function updateCost(inputTokens, outputTokens) {
@@ -1047,6 +1317,7 @@
   clearBtn.addEventListener("click", () => {
     history = []; currentConvId = null;
     messagesEl.innerHTML = "";
+    clearPendingAttachments();
     sessionCost = 0;
     costCounter.textContent = "$0.00000";
     costCounter.classList.remove("visible");
@@ -1056,21 +1327,23 @@
 
   function triggerSend() {
     const text = promptEl.value.trim();
-    if (!text || busy) return;
+    if ((!text && pendingAttachments.length === 0) || busy) return;
+    const attachments = pendingAttachments.map(a => ({ ...a }));
+    clearPendingAttachments();
     promptEl.value = "";
     promptEl.style.height = "auto";
-    sendMessage(text);
+    sendMessage(text, attachments);
   }
 
   // ── Send ──────────────────────────────────────────────────────
-  async function sendMessage(text) {
+  async function sendMessage(text, attachments = []) {
     busy = true;
     sendBtn.disabled = true;
     stopBtn.style.display = "flex";
 
     const userHistIdx = history.length;
-    history.push({ role: "user", content: text });
-    renderUserMessage(text, userHistIdx);
+    history.push({ role: "user", content: text, attachments });
+    renderUserMessage(text, userHistIdx, attachments);
 
     const assistantHistIdx = history.length;
     const activeModelLabel = getCurrentModelDef().label;
@@ -1134,6 +1407,14 @@
         }),
       });
 
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+      if (!res.body) {
+        throw new Error("Risposta vuota dal server.");
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -1146,7 +1427,12 @@
         buffer = lines.pop();
         for (const line of lines) {
           if (line.startsWith("data: ") && line !== "data: [DONE]") {
-            const data = JSON.parse(line.slice(6));
+            let data = {};
+            try {
+              data = JSON.parse(line.slice(6));
+            } catch {
+              continue;
+            }
             if (data.usage) updateCost(data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
             if (data.token) {
               typingEl.remove();
@@ -1166,7 +1452,7 @@
       if (err.name === "AbortError") {
         if (!reply) contentEl.textContent = "[generazione interrotta]";
       } else {
-        contentEl.textContent = "Errore: server non raggiungibile.";
+        contentEl.textContent = `Errore: ${err.message || "server non raggiungibile."}`;
       }
     }
 

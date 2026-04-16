@@ -40,6 +40,53 @@ GOOGLE_ALLOWED_MODELS = {
 }
 
 
+def _to_api_message(msg):
+    role = msg.get("role", "user")
+    if role not in {"system", "user", "assistant"}:
+        role = "user"
+
+    text = msg.get("content", "")
+    if not isinstance(text, str):
+        text = str(text)
+
+    attachments = msg.get("attachments", [])
+    parts = []
+    if text.strip():
+        parts.append({"type": "text", "text": text})
+
+    if isinstance(attachments, list):
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            kind = att.get("type")
+            data_url = att.get("dataUrl") or att.get("data_url")
+            mime_type = att.get("mimeType") or att.get("mime_type") or ""
+            if not isinstance(data_url, str) or not data_url.startswith("data:"):
+                continue
+
+            if kind == "image":
+                parts.append({"type": "image_url", "image_url": {"url": data_url}})
+            elif kind == "video":
+                try:
+                    encoded = data_url.split(",", 1)[1]
+                except IndexError:
+                    encoded = ""
+                if encoded:
+                    parts.append(
+                        {
+                            "type": "input_video",
+                            "input_video": {
+                                "data": encoded,
+                                "mime_type": mime_type or "video/mp4",
+                            },
+                        }
+                    )
+
+    if parts:
+        return {"role": role, "content": parts}
+    return {"role": role, "content": text}
+
+
 # ── Routes ────────────────────────────────────────────────────
 @app.route("/")
 def index():
@@ -48,17 +95,27 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     messages      = data.get("messages", [])
     max_tokens    = data.get("max_tokens", 512)
     system_prompt = data.get("system_prompt", "")
     backend       = data.get("backend", "openrouter")
     requested_model = data.get("model", "")
 
+    if not isinstance(messages, list):
+        messages = []
+    try:
+        max_tokens = int(max_tokens)
+    except (TypeError, ValueError):
+        max_tokens = 512
+    max_tokens = max(64, min(max_tokens, 8192))
+
     api_messages = []
     if system_prompt:
         api_messages.append({"role": "system", "content": system_prompt})
-    api_messages.extend(messages)
+    for msg in messages:
+        if isinstance(msg, dict):
+            api_messages.append(_to_api_message(msg))
 
     if backend == "google":
         api_url = f"{GOOGLE_AI_BASE_URL}/chat/completions"
