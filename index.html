@@ -431,6 +431,10 @@
       align-items: flex-end;
       flex-shrink: 0;
     }
+    #input-area.dragover {
+      border-top-color: #2563eb;
+      background: #eff6ff;
+    }
 
     #prompt {
       flex: 1;
@@ -512,6 +516,22 @@
       title: "Salva conversazione";
     }
     #save-btn:hover { border-color: #22c55e; color: #16a34a; }
+
+    #export-btn {
+      background: none;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      width: 40px; height: 40px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 15px;
+      transition: border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    #export-btn:hover { border-color: #0ea5e9; color: #0284c7; }
 
     #attach-btn {
       background: none;
@@ -612,6 +632,25 @@
       background: rgba(0, 0, 0, 0.15);
     }
 
+    #upload-hint {
+      display: none;
+      padding: 6px 20px 0;
+      font-size: 12px;
+      color: #2563eb;
+      background: #ffffff;
+    }
+    #upload-hint.visible { display: block; }
+
+    #status-msg {
+      display: none;
+      padding: 6px 20px 0;
+      font-size: 12px;
+      background: #ffffff;
+    }
+    #status-msg.visible { display: block; }
+    #status-msg.error { color: #dc2626; }
+    #status-msg.success { color: #16a34a; }
+
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e5e5e5; border-radius: 2px; }
@@ -667,10 +706,13 @@
 
   <div id="messages"></div>
   <div id="attachment-strip"></div>
+  <div id="upload-hint">Rilascia qui immagini o video per allegarli</div>
+  <div id="status-msg"></div>
 
   <div id="input-area">
     <button id="clear" title="Nuova chat">✕</button>
     <button id="save-btn" title="Salva conversazione">💾</button>
+    <button id="export-btn" title="Esporta chat">⤓</button>
     <button id="attach-btn" title="Allega immagini o video">📎</button>
     <input id="attachment-input" type="file" accept="image/*,video/*" multiple />
     <textarea id="prompt" rows="1" placeholder="Message Gemma…"></textarea>
@@ -692,9 +734,12 @@
   const stopBtn      = document.getElementById("stop");
   const clearBtn     = document.getElementById("clear");
   const saveBtn      = document.getElementById("save-btn");
+  const exportBtn    = document.getElementById("export-btn");
   const attachBtn    = document.getElementById("attach-btn");
   const attachInput  = document.getElementById("attachment-input");
   const attachStrip  = document.getElementById("attachment-strip");
+  const uploadHint   = document.getElementById("upload-hint");
+  const statusMsgEl  = document.getElementById("status-msg");
   const dot          = document.getElementById("dot");
   const toggleBtn    = document.getElementById("system-toggle");
   const systemBody   = document.getElementById("system-body");
@@ -710,6 +755,8 @@
   const resetSystem   = document.getElementById("reset-system");
   const backendSelect = document.getElementById("backend-select");
   const modelSelect   = document.getElementById("model-select");
+  const mainEl        = document.getElementById("main");
+  const inputAreaEl   = document.getElementById("input-area");
 
   // ── Modelli disponibili per backend ───────────────────────────
   const MODELS = {
@@ -766,6 +813,21 @@
 
   const MAX_ATTACHMENTS = 4;
   const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+  let dragDepth = 0;
+
+  const MODEL_CAPABILITIES = {
+    openrouter: {
+      "google/gemma-4-31b-it": { image: false, video: false },
+      "google/gemma-3-27b-it": { image: false, video: false },
+      "deepseek/deepseek-v3.2": { image: false, video: false },
+    },
+    google: {
+      "gemma-4-31b-it": { image: false, video: false },
+      "gemma-3-27b-it": { image: false, video: false },
+      "gemini-2.0-flash": { image: true, video: true },
+      "gemini-2.5-flash-preview-04-17": { image: true, video: true },
+    },
+  };
 
   backendSelect.value = currentBackend;
   populateModelSelect(currentBackend);
@@ -960,6 +1022,55 @@
     saveCurrentConversation();
     saveBtn.textContent = "✓";
     setTimeout(() => saveBtn.textContent = "💾", 1500);
+  });
+
+  function getExportMarkdown() {
+    const lines = [];
+    const title = (history.find(m => m.role === "user")?.content || "Chat").slice(0, 80);
+    lines.push(`# ${title || "Chat Export"}`);
+    lines.push("");
+    lines.push(`Exported: ${new Date().toISOString()}`);
+    lines.push(`Backend: ${currentBackend}`);
+    lines.push(`Model: ${modelSelect.value}`);
+    lines.push("");
+
+    for (const msg of history) {
+      const role = msg.role === "assistant" ? "Assistant" : "User";
+      lines.push(`## ${role}`);
+      lines.push("");
+      lines.push(msg.content || "");
+      lines.push("");
+      if (msg.role === "user" && Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+        lines.push("Attachments:");
+        for (const att of msg.attachments) {
+          lines.push(`- ${att.name || "file"} (${att.type || "file"})`);
+        }
+        lines.push("");
+      }
+    }
+    return lines.join("\n");
+  }
+
+  function downloadTextFile(filename, content) {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  exportBtn.addEventListener("click", () => {
+    if (history.length === 0) {
+      showStatus("Nessuna chat da esportare.", true);
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    downloadTextFile(`chat-export-${stamp}.md`, getExportMarkdown());
+    showStatus("Chat esportata in .md", false);
   });
 
   // ── Rendering ─────────────────────────────────────────────────
@@ -1185,6 +1296,55 @@
     renderAttachmentStrip();
   }
 
+  function showStatus(message, isError) {
+    if (!message) {
+      statusMsgEl.className = "";
+      statusMsgEl.textContent = "";
+      return;
+    }
+    statusMsgEl.textContent = message;
+    statusMsgEl.className = `visible ${isError ? "error" : "success"}`;
+    setTimeout(() => {
+      if (statusMsgEl.textContent === message) {
+        statusMsgEl.className = "";
+        statusMsgEl.textContent = "";
+      }
+    }, 3500);
+  }
+
+  function getCurrentModelCapabilities() {
+    const backendCaps = MODEL_CAPABILITIES[currentBackend] || {};
+    return backendCaps[modelSelect.value] || { image: false, video: false };
+  }
+
+  function getCapabilityError(attachments) {
+    if (!attachments || attachments.length === 0) return "";
+    const hasImage = attachments.some(a => a.type === "image");
+    const hasVideo = attachments.some(a => a.type === "video");
+    const caps = getCurrentModelCapabilities();
+    if (hasVideo && !caps.video) {
+      return "Il modello selezionato non supporta video. Usa Google AI Studio + Gemini.";
+    }
+    if (hasImage && !caps.image) {
+      return "Il modello selezionato non supporta immagini. Usa Google AI Studio + Gemini.";
+    }
+    return "";
+  }
+
+  function normalizeErrorMessage(raw, attachments) {
+    const msg = String(raw || "").toLowerCase();
+    if (msg.includes("input_video") || msg.includes("video")) {
+      return "Il provider ha rifiutato il video: prova con Google AI Studio + Gemini.";
+    }
+    if (msg.includes("image_url") || msg.includes("image")) {
+      return "Il provider ha rifiutato l'immagine: prova con Google AI Studio + Gemini.";
+    }
+    if (attachments?.length) {
+      return `Errore multimodale: ${raw || "richiesta non accettata dal provider."}`;
+    }
+    return raw || "server non raggiungibile.";
+  }
+
   function renderAttachmentStrip() {
     attachStrip.innerHTML = "";
     attachStrip.classList.toggle("visible", pendingAttachments.length > 0);
@@ -1240,13 +1400,10 @@
     });
   }
 
-  attachBtn.addEventListener("click", () => attachInput.click());
-  attachInput.addEventListener("change", async (e) => {
-    const files = [...(e.target.files || [])];
+  async function addAttachmentsFromFiles(files) {
     if (files.length === 0) return;
     if (pendingAttachments.length + files.length > MAX_ATTACHMENTS) {
-      alert(`Puoi allegare massimo ${MAX_ATTACHMENTS} file per messaggio.`);
-      attachInput.value = "";
+      showStatus(`Puoi allegare massimo ${MAX_ATTACHMENTS} file per messaggio.`, true);
       return;
     }
     for (const file of files) {
@@ -1254,7 +1411,7 @@
       const isVideo = file.type.startsWith("video/");
       if (!isImage && !isVideo) continue;
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        alert(`${file.name} supera il limite di 20MB.`);
+        showStatus(`${file.name} supera il limite di 20MB.`, true);
         continue;
       }
       const dataUrl = await readAsDataUrl(file);
@@ -1267,8 +1424,50 @@
         dataUrl,
       });
     }
-    attachInput.value = "";
     renderAttachmentStrip();
+  }
+
+  attachBtn.addEventListener("click", () => attachInput.click());
+  attachInput.addEventListener("change", async (e) => {
+    const files = [...(e.target.files || [])];
+    await addAttachmentsFromFiles(files);
+    attachInput.value = "";
+  });
+
+  function eventHasFiles(event) {
+    return [...(event.dataTransfer?.types || [])].includes("Files");
+  }
+
+  function showDropUi(show) {
+    inputAreaEl.classList.toggle("dragover", show);
+    uploadHint.classList.toggle("visible", show);
+  }
+
+  mainEl.addEventListener("dragover", (e) => {
+    if (eventHasFiles(e)) e.preventDefault();
+  });
+
+  mainEl.addEventListener("dragenter", (e) => {
+    if (!eventHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth += 1;
+    showDropUi(true);
+  });
+
+  mainEl.addEventListener("dragleave", (e) => {
+    if (!eventHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) showDropUi(false);
+  });
+
+  mainEl.addEventListener("drop", async (e) => {
+    if (!eventHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    showDropUi(false);
+    const files = [...(e.dataTransfer?.files || [])];
+    await addAttachmentsFromFiles(files);
   });
 
   // ── Cost & balance ────────────────────────────────────────────
@@ -1329,6 +1528,11 @@
     const text = promptEl.value.trim();
     if ((!text && pendingAttachments.length === 0) || busy) return;
     const attachments = pendingAttachments.map(a => ({ ...a }));
+    const capabilityError = getCapabilityError(attachments);
+    if (capabilityError) {
+      showStatus(capabilityError, true);
+      return;
+    }
     clearPendingAttachments();
     promptEl.value = "";
     promptEl.style.height = "auto";
@@ -1442,7 +1646,7 @@
             }
             if (data.error) {
               typingEl.remove();
-              contentEl.textContent = `Errore: ${data.error}`;
+              contentEl.textContent = `Errore: ${normalizeErrorMessage(data.error, attachments)}`;
             }
           }
         }
@@ -1452,7 +1656,7 @@
       if (err.name === "AbortError") {
         if (!reply) contentEl.textContent = "[generazione interrotta]";
       } else {
-        contentEl.textContent = `Errore: ${err.message || "server non raggiungibile."}`;
+        contentEl.textContent = `Errore: ${normalizeErrorMessage(err.message, attachments)}`;
       }
     }
 
