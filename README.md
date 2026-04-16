@@ -40,7 +40,7 @@ On first launch, the model (~5 GB) is downloaded automatically from HuggingFace.
 **Double-click** `Gemma Chat` on your Desktop.
 
 - A terminal window opens and loads the model (~15 seconds)
-- Your browser opens automatically at `http://localhost:5000`
+- Your browser opens automatically at `http://localhost:5001`
 - Close the terminal to stop the server
 
 ### System Prompt

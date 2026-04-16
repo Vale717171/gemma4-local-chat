@@ -37,7 +37,12 @@ pip install -r requirements.txt -q
 echo ""
 echo "Creating desktop shortcut..."
 SHORTCUT="$HOME/Desktop/Gemma Chat.command"
-cp launch.command "$SHORTCUT"
+PROJECT_DIR="$(pwd)"
+cat > "$SHORTCUT" <<EOF
+#!/bin/bash
+export GEMMA_CHAT_DIR="$PROJECT_DIR"
+"$PROJECT_DIR/launch.command"
+EOF
 chmod +x "$SHORTCUT"
 
 echo ""

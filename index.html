@@ -764,21 +764,42 @@
     const convs = getConversations();
     convList.innerHTML = "";
     if (convs.length === 0) {
-      convList.innerHTML = `<div style="padding:12px;font-size:12px;color:#9ca3af;text-align:center;">Nessuna conversazione salvata</div>`;
+      const empty = document.createElement("div");
+      empty.style.padding = "12px";
+      empty.style.fontSize = "12px";
+      empty.style.color = "#9ca3af";
+      empty.style.textAlign = "center";
+      empty.textContent = "Nessuna conversazione salvata";
+      convList.appendChild(empty);
       return;
     }
     for (const conv of convs) {
       const item = document.createElement("div");
       item.className = "conv-item" + (conv.id === currentConvId ? " active" : "");
-      item.innerHTML = `
-        <div class="conv-item-inner">
-          <div class="conv-title">${conv.title}</div>
-          <div class="conv-date">${formatDate(conv.date)}</div>
-        </div>
-        <button class="conv-delete" title="Elimina">✕</button>
-      `;
-      item.querySelector(".conv-item-inner").addEventListener("click", () => loadConversation(conv.id));
-      item.querySelector(".conv-delete").addEventListener("click", (e) => {
+
+      const inner = document.createElement("div");
+      inner.className = "conv-item-inner";
+
+      const title = document.createElement("div");
+      title.className = "conv-title";
+      title.textContent = conv.title;
+
+      const date = document.createElement("div");
+      date.className = "conv-date";
+      date.textContent = formatDate(conv.date);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "conv-delete";
+      deleteBtn.title = "Elimina";
+      deleteBtn.textContent = "✕";
+
+      inner.appendChild(title);
+      inner.appendChild(date);
+      item.appendChild(inner);
+      item.appendChild(deleteBtn);
+
+      inner.addEventListener("click", () => loadConversation(conv.id));
+      deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteConversation(conv.id);
       });
